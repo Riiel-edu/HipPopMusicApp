@@ -7,10 +7,12 @@ import com.example.csc490seniorproject.audio.HighQualityPlaybackEngine
 import com.example.csc490seniorproject.objects.Beatmap
 import com.example.csc490seniorproject.objects.Song
 import com.example.csc490seniorproject.objects.totalSteps
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 class WorkspaceViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -57,6 +59,28 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     /** Moves the song's playhead to [step] (in the song's own steps). Works whether playing or stopped. */
     fun seekSong(step: Int) {
         _currentSong.value?.let { songPlaybackEngine.seekTo(step, it.totalSteps()) }
+    }
+
+    suspend fun loadSongById(songId: String): Boolean {
+        return try {
+            val document = FirebaseFirestore.getInstance()
+                .collection("songs")
+                .document(songId)
+                .get()
+                .await()
+
+            val song = document.toObject(Song::class.java)
+
+            if (song != null) {
+                setCurrentSong(song)
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
     }
 
     /** Suspends until every sample the current song needs is loaded, so playback can start with no cold-load gap. */

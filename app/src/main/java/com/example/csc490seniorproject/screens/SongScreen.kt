@@ -36,6 +36,12 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import java.util.Locale
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 
 @Composable
 fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavController) {
@@ -491,24 +497,42 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
                 ) {
                     Text("Select all genres that describe this song.")
 
-                    musicGenres.forEach { genre ->
-                        FilterChip(
-                            selected = genre in selectedSongTags,
-                            onClick = {
-                                selectedSongTags =
-                                    if (genre in selectedSongTags) {
-                                        selectedSongTags - genre
-                                    } else {
-                                        selectedSongTags + genre
-                                    }
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(musicGenres) { genre ->
+                            FilterChip(
+                                selected = genre in selectedSongTags,
+                                onClick = {
+                                    selectedSongTags =
+                                        if (genre in selectedSongTags) {
+                                            selectedSongTags - genre
+                                        } else {
+                                            selectedSongTags + genre
+                                        }
 
-                                songTagError = null
-                            },
-                            label = {
-                                Text(genre)
-                            },
-                            enabled = !savingSongTags
-                        )
+                                    songTagError = null
+                                },
+                                label = {
+                                    Text(
+                                        text = genre,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        fontFamily = fredoka
+                                    )
+                                },
+                                enabled = !savingSongTags,
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF5D36EB),
+                                    selectedLabelColor = Color.White,
+                                    containerColor = Color(0xFFbfb1fa),
+                                    labelColor = Color.White
+                                )
+                            )
+                        }
                     }
 
                     songTagError?.let { error ->
@@ -768,18 +792,17 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
                                 ) {
                                     rowTags.forEach { tag ->
                                         Surface(
-                                            color = purple,
+                                            color = Color(0xFFBFB1FA),
                                             shape = RoundedCornerShape(16.dp)
                                         ) {
                                             Text(
                                                 text = tag,
                                                 fontFamily = fredoka,
                                                 color = Color.White,
-                                                fontSize = 10.sp,
-                                                maxLines = 1,
+                                                fontSize = 11.sp,
                                                 modifier = Modifier.padding(
-                                                    horizontal = 8.dp,
-                                                    vertical = 4.dp
+                                                    horizontal = 10.dp,
+                                                    vertical = 5.dp
                                                 )
                                             )
                                         }

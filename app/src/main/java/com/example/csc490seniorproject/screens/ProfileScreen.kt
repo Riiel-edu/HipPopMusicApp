@@ -1028,7 +1028,7 @@ private fun ProfileSongCard(
                     ),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Listen", fontFamily = font)
+                    Text("▶ Play", fontFamily = font)
                 }
 
                 Button(

@@ -4,14 +4,17 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.SoundPool
 import com.example.csc490seniorproject.objects.Instrument
+import com.example.csc490seniorproject.objects.PlaybackClock
 import com.example.csc490seniorproject.objects.Song
 import com.example.csc490seniorproject.objects.Track
 import com.example.csc490seniorproject.objects.stepDurationMs
 import com.example.csc490seniorproject.objects.totalSteps
+import com.example.csc490seniorproject.viewmodels.GameVM
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,9 +43,26 @@ class HighQualityPlaybackEngine(
     private val resIdToSoundId = mutableMapOf<Int, Int>()
     private val readySignals = mutableMapOf<Int, CompletableDeferred<Unit>>()
 
+    private val loadLock = Any()
+    private val completedLoads = mutableMapOf<Int, Int>()
+
     init {
-        soundPool.setOnLoadCompleteListener { _, soundId, _ ->
-            readySignals[soundId]?.complete(Unit)
+        soundPool.setOnLoadCompleteListener { _, soundId, status ->
+            synchronized(loadLock) {
+                val signal = readySignals[soundId]
+
+                if (signal != null) {
+                    if (status == 0) {
+                        signal.complete(Unit)
+                    } else {
+                        signal.completeExceptionally(
+                            IllegalStateException("SoundPool failed to load sound: $soundId")
+                        )
+                    }
+                } else {
+                    completedLoads[soundId] = status
+                }
+            }
         }
     }
 
@@ -57,11 +77,32 @@ class HighQualityPlaybackEngine(
     @Volatile private var seekRequestStep: Int? = null
 
     private fun ensureLoaded(resId: Int): Int {
-        resIdToSoundId[resId]?.let { return it }
-        val soundId = soundPool.load(context, resId, 1)
-        resIdToSoundId[resId] = soundId
-        readySignals[soundId] = CompletableDeferred()
-        return soundId
+        synchronized(loadLock) {
+            resIdToSoundId[resId]?.let { return it }
+
+            val soundId = soundPool.load(context, resId, 1)
+
+            if (soundId == 0) {
+                throw IllegalStateException("Failed to load resource: $resId")
+            }
+
+            val signal = CompletableDeferred<Unit>()
+
+            resIdToSoundId[resId] = soundId
+            readySignals[soundId] = signal
+
+            completedLoads.remove(soundId)?.let { status ->
+                if (status == 0) {
+                    signal.complete(Unit)
+                } else {
+                    signal.completeExceptionally(
+                        IllegalStateException("SoundPool loading failed: $soundId")
+                    )
+                }
+            }
+
+            return soundId
+        }
     }
 
     suspend fun preload(song: Song) {
@@ -83,25 +124,54 @@ class HighQualityPlaybackEngine(
         }
     }
 
-    fun play(song: Song, fromStep: Int? = null, startDelayMs: Long = 0L) {
+    fun play(
+        song: Song,
+        fromStep: Int? = null,
+        startDelayMs: Long = 100L
+    ) {
         stop()
+
         if (song.tracks.isEmpty() || song.totalSteps() <= 0) return
-        if (fromStep != null) {
-            _currentStep.value = fromStep.coerceIn(0, song.totalSteps() - 1)
-        }
-        seekRequestStep = null // drop any stale seek left over from a previous run
-        _isPlaying.value = true
+
+        val startStep = (fromStep ?: _currentStep.value)
+            .coerceIn(0, song.totalSteps() - 1)
+
+        _currentStep.value = startStep
+        seekRequestStep = null
+
         job = scope.launch(Dispatchers.Default) {
-            preload(song) // fast no-op after the first time; guarantees sounds are ready before the loop fires them
-            if (startDelayMs > 0) delay(startDelayMs)
-            scheduleLoop(song)
+            try {
+                preload(song)
+
+                if (!isActive) return@launch
+
+                PlaybackClock.startTimeNanos = System.nanoTime()
+
+                _isPlaying.value = true
+
+                android.util.Log.d(
+                    "PlaybackEngine",
+                    "Playback started. Clock: ${PlaybackClock.startTimeNanos}"
+                )
+
+                scheduleLoop(song, startStep, startDelayMs)
+
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _isPlaying.value = false
+                android.util.Log.e("PlaybackEngine", "Playback failed", e)
+            }
         }
     }
 
     fun stop() {
         _isPlaying.value = false
+
         job?.cancel()
         job = null
+
+        PlaybackClock.startTimeNanos = 0L
     }
 
     fun seekTo(step: Int, totalSteps: Int) {
@@ -115,26 +185,60 @@ class HighQualityPlaybackEngine(
         soundPool.release()
     }
 
-    private suspend fun scheduleLoop(song: Song) {
-        val stepMs = song.stepDurationMs()
+
+    private suspend fun scheduleLoop(
+        song: Song,
+        startStep: Int,
+        startDelayMs: Long
+    ) {
+        val stepNanos = (song.stepDurationMs() * 1_000_000.0).toLong()
         val totalSteps = song.totalSteps()
+
+        if (totalSteps <= 0 || stepNanos <= 0) return
+
         val anySolo = song.tracks.any { it.solo }
-        fun isAudible(t: Track) = if (anySolo) t.solo else !t.muted
 
-        var step = _currentStep.value
-        var referenceTime = System.currentTimeMillis() - (step * stepMs).toLong()
+        fun isAudible(track: Track) =
+            if (anySolo) track.solo else !track.muted
 
-        while (scope.isActive && _isPlaying.value) {
+        var step = startStep
+
+        var nextStepTime = PlaybackClock.startTimeNanos +
+                (startDelayMs * 1_000_000L) +
+                (startStep * stepNanos)
+
+        while (currentCoroutineContext().isActive && _isPlaying.value) {
+
+            // Handle seeking
             seekRequestStep?.let { seekStep ->
                 step = seekStep
-                referenceTime = System.currentTimeMillis() - (step * stepMs).toLong()
                 seekRequestStep = null
+                nextStepTime = System.nanoTime()
             }
+
+            // Wait for scheduled step time
+            while (currentCoroutineContext().isActive) {
+                val remaining = nextStepTime - System.nanoTime()
+
+                if (remaining <= 0L) break
+
+                delay(
+                    (remaining / 1_000_000L).coerceAtLeast(1L)
+                )
+            }
+
+            if (!currentCoroutineContext().isActive || !_isPlaying.value) break
 
             _currentStep.value = step
 
+            android.util.Log.d(
+                "PlaybackEngine",
+                "PROCESSING STEP: $step"
+            )
+
             for (track in song.tracks) {
                 if (!isAudible(track)) continue
+
                 for (note in track.notes) {
                     if (note.startStep == step) {
                         playOneShot(
@@ -142,24 +246,22 @@ class HighQualityPlaybackEngine(
                             pitch = note.pitch,
                             velocity = note.velocity,
                             volume = track.volume,
-                            durationMs = note.lengthSteps * stepMs
+                            durationMs = note.lengthSteps * song.stepDurationMs()
                         )
                     }
                 }
             }
 
-            val nextStepTime = referenceTime + ((step + 1) * stepMs).toLong()
-            val delayMs = nextStepTime - System.currentTimeMillis()
-            if (delayMs > 0) delay(delayMs)
+            step++
+            nextStepTime += stepNanos
 
-            step = (step + 1) % totalSteps
-            if (step == 0) {
-                // Looped back to the start — re-anchor so tiny scheduling drift
-                // over a long loop never has a chance to accumulate.
-                referenceTime = System.currentTimeMillis()
+            if (step >= totalSteps) {
+                break
             }
         }
+        _isPlaying.value = false
     }
+
 
     private fun playOneShot(instrument: Instrument, pitch: Int, velocity: Int, volume: Float, durationMs: Double) {
         val vol = (velocity / 127f).coerceIn(0f, 1f) * volume.coerceIn(0f, 1f) * VOICE_GAIN
@@ -176,7 +278,8 @@ class HighQualityPlaybackEngine(
         val rate = 2.0.pow((pitch - zone.basePitch) / 12.0).toFloat().coerceIn(0.5f, 2.0f)
 
         if (instrument !in SUSTAINED_INSTRUMENTS) {
-            soundPool.play(soundId, vol, vol, 1, 0, rate) // one-shot, rings out naturally
+
+            soundPool.play(soundId, vol, vol, 1, 0, rate)
             return
         }
 
