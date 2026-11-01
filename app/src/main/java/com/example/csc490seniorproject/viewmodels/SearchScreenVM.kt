@@ -14,6 +14,7 @@ import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 
 class SearchScreenVM(application: Application) : AndroidViewModel(application) {
     val songsList = mutableStateListOf<Song>()
@@ -30,7 +31,21 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
 
-    private var songsListener: ListenerRegistration? = null
+    // Three scoped listeners instead of one broad `songs` query. The songs rule
+    // now depends on `published` / `ownerId` / `sharedWith`, fields that differ
+    // per document. An unscoped query can't be proven safe against a rule like
+    // that -- Firestore denies the whole request rather than filtering results
+    // (security rules "aren't filters"). Each query below IS constrained to
+    // match the rule's own condition exactly, so each one is provably safe on
+    // its own and Firestore allows it.
+    private var publicSongsListener: ListenerRegistration? = null
+    private var ownSongsListener: ListenerRegistration? = null
+    private var sharedSongsListener: ListenerRegistration? = null
+
+    private val publicSongs = mutableMapOf<String, Song>()
+    private val ownSongs = mutableMapOf<String, Song>()
+    private val sharedSongs = mutableMapOf<String, Song>()
+
     private var songsGeneration = 0
     private var searchGeneration = 0
 
@@ -38,48 +53,77 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
         songsGeneration++
         val generation = songsGeneration
 
-        songsListener?.remove()
-        songsListener = null
+        publicSongsListener?.remove()
+        ownSongsListener?.remove()
+        sharedSongsListener?.remove()
+        publicSongsListener = null
+        ownSongsListener = null
+        sharedSongsListener = null
 
+        publicSongs.clear()
+        ownSongs.clear()
+        sharedSongs.clear()
         songsList.clear()
         userResults.clear()
         friendStatuses.clear()
         songsError = null
         searchGeneration++
 
-        if (firebaseAuth.currentUser == null) {
+        val uid = firebaseAuth.currentUser?.uid
+        if (uid == null) {
             songsError = "Please log in to see songs."
-        } else {
-            songsListener = db.collection("songs")
-                .addSnapshotListener { snapshot, error ->
-                    if (generation != songsGeneration) {
-                        return@addSnapshotListener
-                    }
-
-                    if (error != null) {
-                        songsError = error.localizedMessage
-                            ?: "Unable to load songs."
-                        return@addSnapshotListener
-                    }
-
-                    try {
-                        val songs = snapshot?.documents.orEmpty()
-                            .mapNotNull { document ->
-                                document.toObject(Song::class.java)
-                                    ?.copy(id = document.id)
-                            }
-
-                        songsList.clear()
-                        songsList.addAll(
-                            songs.sortedBy { it.name.lowercase() }
-                        )
-                        songsError = null
-                    } catch (e: Exception) {
-                        songsError = e.localizedMessage
-                            ?: "A song has an invalid field."
-                    }
-                }
+            return@AuthStateListener
         }
+
+        fun mergeAndPublish() {
+            if (generation != songsGeneration) return
+            val merged = (publicSongs.values + ownSongs.values + sharedSongs.values)
+                .distinctBy { it.id }
+                .sortedBy { it.name.lowercase() }
+            songsList.clear()
+            songsList.addAll(merged)
+        }
+
+        fun attach(query: Query, target: MutableMap<String, Song>): ListenerRegistration {
+            return query.addSnapshotListener { snapshot, error ->
+                if (generation != songsGeneration) {
+                    return@addSnapshotListener
+                }
+
+                if (error != null) {
+                    songsError = error.localizedMessage
+                        ?: "Unable to load songs."
+                    return@addSnapshotListener
+                }
+
+                try {
+                    target.clear()
+                    snapshot?.documents.orEmpty().forEach { document ->
+                        document.toObject(Song::class.java)
+                            ?.copy(id = document.id)
+                            ?.let { target[document.id] = it }
+                    }
+                    songsError = null
+                    mergeAndPublish()
+                } catch (e: Exception) {
+                    songsError = e.localizedMessage
+                        ?: "A song has an invalid field."
+                }
+            }
+        }
+
+        publicSongsListener = attach(
+            db.collection("songs").whereEqualTo("published", true),
+            publicSongs
+        )
+        ownSongsListener = attach(
+            db.collection("songs").whereEqualTo("ownerId", uid),
+            ownSongs
+        )
+        sharedSongsListener = attach(
+            db.collection("songs").whereArrayContains("sharedWith", uid),
+            sharedSongs
+        )
     }
 
     init {
@@ -233,7 +277,9 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
         songsGeneration++
         searchGeneration++
         auth.removeAuthStateListener(authListener)
-        songsListener?.remove()
+        publicSongsListener?.remove()
+        ownSongsListener?.remove()
+        sharedSongsListener?.remove()
         super.onCleared()
     }
 }
