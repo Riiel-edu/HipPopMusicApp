@@ -31,6 +31,17 @@ class ProfileScreenVM(application: Application) : AndroidViewModel(application) 
     var profilePictureUrl by mutableStateOf("")
     private val db = FirebaseFirestore.getInstance()
 
+    // The profile's immutable login username (the usernames/{key} doc id) --
+    // distinct from profileUsername, which is the editable display name.
+    // setPrivacy() needs this one, since it's what the usernames mirror doc
+    // is keyed by.
+    var accountUsername by mutableStateOf("")
+
+    // Whether the profile currently loaded has privacy turned on.
+    var isPrivate by mutableStateOf(false)
+
+    var profileLocked by mutableStateOf<Boolean?>(null)
+
     init {
         viewModelScope.launch {
             songsList.add(Song())
@@ -72,15 +83,78 @@ class ProfileScreenVM(application: Application) : AndroidViewModel(application) 
             .addOnFailureListener { e -> println("FIREBASE: resolveUid failed: $e") }
     }
 
+    // Determines whether `otherUid`'s profile should be shown in full or
+    // locked down to just their username + friend-request button. Reads the
+    // public usernames/{username} doc first (always readable, mirrors the
+    // privacy flag) so this never has to touch the gated users/{uid} doc just
+    // to find out whether it's gated. Only for a private account does it then
+    // check the viewer's own friends subcollection (also publicly readable)
+    // to see whether they're let in.
+    fun checkProfileLock(
+        username: String,
+        myUid: String?,
+        otherUid: String,
+        onResult: (locked: Boolean, private: Boolean) -> Unit
+    ) {
+        if (myUid != null && myUid == otherUid) {
+            onResult(false, isPrivate)
+            return
+        }
+
+        db.collection("usernames").document(username.lowercase()).get()
+            .addOnSuccessListener { doc ->
+                val private = doc.getBoolean("privacy") ?: false
+
+                if (!private) {
+                    onResult(false, false)
+                    return@addOnSuccessListener
+                }
+
+                if (myUid == null) {
+                    onResult(true, true)
+                    return@addOnSuccessListener
+                }
+
+                db.collection("users").document(otherUid)
+                    .collection("friends").document(myUid).get()
+                    .addOnSuccessListener { friendDoc ->
+                        onResult(!friendDoc.exists(), true)
+                    }
+                    .addOnFailureListener {
+                        onResult(true, true)
+                    }
+            }
+            .addOnFailureListener {
+                // Couldn't confirm either way -- fail closed rather than
+                // risk showing a private profile.
+                onResult(true, false)
+            }
+    }
+
     // Call once when ProfileScreen loads.
     fun loadProfile(username: String, currentUid: String?) {
+        accountUsername = username
+        profileLocked = null
+
         resolveUid(username) { uid ->
             profileUid = uid
-            getSongs(uid)
-            getFriends(uid)
-            if (currentUid != null) {
-                if (currentUid == uid) getIncomingRequests(currentUid)
-                else checkFriendStatus(currentUid, uid)
+
+            checkProfileLock(username, currentUid, uid) { locked, private ->
+                profileLocked = locked
+                isPrivate = private
+
+                if (!locked) {
+                    getSongs(uid)
+                    getFriends(uid)
+                } else {
+                    songsList.clear()
+                    friendsList.clear()
+                }
+
+                if (currentUid != null) {
+                    if (currentUid == uid) getIncomingRequests(currentUid)
+                    else checkFriendStatus(currentUid, uid)
+                }
             }
         }
     }
@@ -352,6 +426,26 @@ class ProfileScreenVM(application: Application) : AndroidViewModel(application) 
                 println("FIREBASE: Failed to save profile details: ${e.message}")
             }
     }
+
+    // Flips the account's privacy flag on both the gated users/{uid} doc and
+    // its public usernames/{username} mirror, so search and login can still
+    // see the privacy flag without ever reading the gated doc.
+    fun setPrivacy(myUid: String, username: String, private: Boolean) {
+        val usernameKey = username.lowercase()
+
+        db.collection("users").document(myUid)
+            .update("privacy", private)
+            .addOnSuccessListener {
+                isPrivate = private
+
+                db.collection("usernames").document(usernameKey)
+                    .update("privacy", private)
+                    .addOnFailureListener { e ->
+                        println("FIREBASE: Failed to update usernames privacy mirror: ${e.message}")
+                    }
+            }
+            .addOnFailureListener { e ->
+                println("FIREBASE: Failed to update privacy: ${e.message}")
+            }
+    }
 }
-
-

@@ -20,9 +20,7 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
     val songsList = mutableStateListOf<Song>()
     val userResults = mutableStateListOf<User>()
 
-    // Real relationship status per uid (NONE / REQUEST_SENT / REQUEST_RECEIVED / FRIENDS),
-    // looked up from Firestore so search results reflect reality instead of only
-    // remembering requests sent during this screen's lifetime.
+
     val friendStatuses = mutableStateMapOf<String, FriendStatus>()
 
     var songsError by mutableStateOf<String?>(null)
@@ -31,13 +29,7 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
 
-    // Three scoped listeners instead of one broad `songs` query. The songs rule
-    // now depends on `published` / `ownerId` / `sharedWith`, fields that differ
-    // per document. An unscoped query can't be proven safe against a rule like
-    // that -- Firestore denies the whole request rather than filtering results
-    // (security rules "aren't filters"). Each query below IS constrained to
-    // match the rule's own condition exactly, so each one is provably safe on
-    // its own and Firestore allows it.
+
     private var publicSongsListener: ListenerRegistration? = null
     private var ownSongsListener: ListenerRegistration? = null
     private var sharedSongsListener: ListenerRegistration? = null
@@ -150,43 +142,24 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
                     return@usernamesLoaded
                 }
 
-                val uids = snapshot.documents
-                    .mapNotNull { it.getString("uid") }
-                    .distinct()
-                    .filter { it != myUid } // never show yourself in your own search
+                for (doc in snapshot.documents) {
+                    val uid = doc.getString("uid") ?: continue
+                    if (uid == myUid || userResults.any { it.uid == uid }) continue
 
-                for (uid in uids) {
-                    db.collection("users")
-                        .document(uid)
-                        .get()
-                        .addOnSuccessListener userLoaded@{ document ->
-                            if (thisGeneration != searchGeneration) {
-                                return@userLoaded
-                            }
-
-                            if (
-                                document.exists() &&
-                                userResults.none { it.uid == uid }
-                            ) {
-                                userResults.add(
-                                    User(
-                                        uid = uid,
-                                        username = document.getString("username") ?: "",
-                                        first_name = document.getString("first_name") ?: "",
-                                        last_name = document.getString("last_name") ?: "",
-                                        privacy = document.getBoolean("privacy") ?: false,
-                                        DoB = document.getString("dob") ?: "",
-                                        email = document.getString("email") ?: "",
-                                        songs = arrayListOf(),
-                                        friends = arrayListOf()
-                                    )
-                                )
-                                refreshFriendStatus(myUid, uid, thisGeneration)
-                            }
-                        }
-                        .addOnFailureListener { error ->
-                            println("FIREBASE: Loading user failed: $error")
-                        }
+                    userResults.add(
+                        User(
+                            uid = uid,
+                            username = doc.getString("username") ?: doc.id,
+                            first_name = "",
+                            last_name = "",
+                            privacy = doc.getBoolean("privacy") ?: false,
+                            DoB = "",
+                            email = doc.getString("email") ?: "",
+                            songs = arrayListOf(),
+                            friends = arrayListOf()
+                        )
+                    )
+                    refreshFriendStatus(myUid, uid, thisGeneration)
                 }
             }
             .addOnFailureListener { error ->
@@ -194,8 +167,6 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
             }
     }
 
-    // Checks the actual friends/friendRequests subcollections so a result shows
-    // Friends / Request Sent / Already follows you instead of always "Add Friend".
     private fun refreshFriendStatus(myUid: String, targetUid: String, generation: Int) {
         db.collection("users").document(myUid)
             .collection("friends").document(targetUid)

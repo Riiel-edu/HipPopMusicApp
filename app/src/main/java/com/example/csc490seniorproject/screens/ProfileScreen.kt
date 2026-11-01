@@ -77,6 +77,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
 import com.google.firebase.firestore.Filter
 import com.google.firebase.firestore.SetOptions
 
@@ -489,6 +490,32 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                                 }
                             }
                         }
+
+                        Spacer(Modifier.height(4.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Private account",
+                                fontFamily = fredoka,
+                                fontSize = 14.sp
+                            )
+
+                            Switch(
+                                checked = viewModel.isPrivate,
+                                onCheckedChange = { checked ->
+                                    profileUid?.let { uid ->
+                                        viewModel.setPrivacy(
+                                            uid,
+                                            viewModel.accountUsername,
+                                            checked
+                                        )
+                                    }
+                                }
+                            )
+                        }
                     }
 
                     if (
@@ -628,31 +655,110 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
 
             Spacer(Modifier.height(8.dp))
 
-            Text(
-                text = "About Me",
-                fontFamily = fredoka,
-                fontSize = 24.sp
-            )
+            if (viewModel.profileLocked == null) {
+                Text(
+                    text = "Loading…",
+                    fontFamily = fredoka,
+                    fontSize = 14.sp,
+                    color = Color.DarkGray
+                )
+            } else if (viewModel.profileLocked == false) {
+                Text(
+                    text = "About Me",
+                    fontFamily = fredoka,
+                    fontSize = 24.sp
+                )
 
-            Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(10.dp))
 
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                shadowElevation = 4.dp,
-                border = BorderStroke(2.dp, ProfilePurple),
-                color = Color.White,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (isEditing) {
-                    OutlinedTextField(
-                        value = aboutMe,
-                        onValueChange = { aboutMe = it },
-                        placeholder = { Text("Write about yourself...") },
-                        modifier = Modifier.fillMaxWidth()
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    shadowElevation = 4.dp,
+                    border = BorderStroke(2.dp, ProfilePurple),
+                    color = Color.White,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (isEditing) {
+                        OutlinedTextField(
+                            value = aboutMe,
+                            onValueChange = { aboutMe = it },
+                            placeholder = { Text("Write about yourself...") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Text(
+                            text = aboutMe,
+                            fontFamily = fredoka,
+                            fontSize = 13.sp,
+                            color = Color(0xFF444444),
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    ProfileTabCard(
+                        label = "Songs",
+                        imageRes = R.drawable.song_image,
+                        selected = selectedTab == ProfileTab.SONGS,
+                        font = fredoka,
+                        modifier = Modifier.weight(1f),
+                        onClick = { selectedTab = ProfileTab.SONGS }
                     )
-                } else {
+
+                    ProfileTabCard(
+                        label = "Friends",
+                        imageRes = R.drawable.friends,
+                        selected = selectedTab == ProfileTab.FRIENDS,
+                        font = fredoka,
+                        modifier = Modifier.weight(1f),
+                        onClick = { selectedTab = ProfileTab.FRIENDS }
+                    )
+
+                    ProfileTabCard(
+                        label = "Messages",
+                        imageRes = R.drawable.chat,
+                        selected = selectedTab == ProfileTab.CHATS,
+                        font = fredoka,
+                        modifier = Modifier.weight(1f),
+                        onClick = { selectedTab = ProfileTab.CHATS }
+                    )
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                Text(
+                    text = when (selectedTab) {
+                        ProfileTab.SONGS -> "Songs"
+                        ProfileTab.FRIENDS -> "Friends"
+                        ProfileTab.CHATS -> "Messages"
+                    },
+                    fontFamily = fredoka,
+                    fontSize = 20.sp
+                )
+            } else {
+                Text(
+                    text = "Private Account",
+                    fontFamily = fredoka,
+                    fontSize = 24.sp
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    shadowElevation = 4.dp,
+                    border = BorderStroke(2.dp, ProfilePurple),
+                    color = Color.White,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
-                        text = aboutMe,
+                        text = "This account is private. Add $editableUsername as a friend to see their songs, friends, and messages.",
                         fontFamily = fredoka,
                         fontSize = 13.sp,
                         color = Color(0xFF444444),
@@ -660,254 +766,210 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                     )
                 }
             }
-
-            Spacer(Modifier.height(20.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                ProfileTabCard(
-                    label = "Songs",
-                    imageRes = R.drawable.song_image,
-                    selected = selectedTab == ProfileTab.SONGS,
-                    font = fredoka,
-                    modifier = Modifier.weight(1f),
-                    onClick = { selectedTab = ProfileTab.SONGS }
-                )
-
-                ProfileTabCard(
-                    label = "Friends",
-                    imageRes = R.drawable.friends,
-                    selected = selectedTab == ProfileTab.FRIENDS,
-                    font = fredoka,
-                    modifier = Modifier.weight(1f),
-                    onClick = { selectedTab = ProfileTab.FRIENDS }
-                )
-
-                ProfileTabCard(
-                    label = "Messages",
-                    imageRes = R.drawable.chat,
-                    selected = selectedTab == ProfileTab.CHATS,
-                    font = fredoka,
-                    modifier = Modifier.weight(1f),
-                    onClick = { selectedTab = ProfileTab.CHATS }
-                )
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            Text(
-                text = when (selectedTab) {
-                    ProfileTab.SONGS -> "Songs"
-                    ProfileTab.FRIENDS -> "Friends"
-                    ProfileTab.CHATS -> "Messages"
-                },
-                fontFamily = fredoka,
-                fontSize = 20.sp
-            )
         }
 
-        when (selectedTab) {
-            ProfileTab.SONGS -> {
-                item {
-                    when {
-                        currentUid == null -> {
-                            Text("Please log in to see songs.", fontFamily = fredoka)
-                        }
+        if (viewModel.profileLocked == false) {
+            when (selectedTab) {
+                ProfileTab.SONGS -> {
+                    item {
+                        when {
+                            currentUid == null -> {
+                                Text("Please log in to see songs.", fontFamily = fredoka)
+                            }
 
-                        profileUid.isNullOrBlank() -> {
-                            Text(
-                                "Waiting for the profile UID…",
-                                fontFamily = fredoka
-                            )
-                        }
+                            profileUid.isNullOrBlank() -> {
+                                Text(
+                                    "Waiting for the profile UID…",
+                                    fontFamily = fredoka
+                                )
+                            }
 
-                        songsLoading -> {
-                            Text("Loading songs…", fontFamily = fredoka)
-                        }
+                            songsLoading -> {
+                                Text("Loading songs…", fontFamily = fredoka)
+                            }
 
-                        songsError != null -> {
-                            Text(
-                                text = songsError.orEmpty(),
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
+                            songsError != null -> {
+                                Text(
+                                    text = songsError.orEmpty(),
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
 
-                        songsList.isEmpty() -> {
-                            Text(
-                                "No songs yet.",
-                                fontFamily = fredoka,
-                                color = Color.DarkGray
-                            )
+                            songsList.isEmpty() -> {
+                                Text(
+                                    "No songs yet.",
+                                    fontFamily = fredoka,
+                                    color = Color.DarkGray
+                                )
+                            }
                         }
+                    }
+
+                    items(
+                        items = songsList,
+                        key = { it.id }
+                    ) { song ->
+                        ProfileSongCard(
+                            song = song,
+                            description = descriptions[song.id]
+                                ?: "No description provided.",
+                            font = fredoka,
+                            onDetails = {
+                                navController.navigate(
+                                    "SongScreen/${Uri.encode(song.id)}"
+                                )
+                            }
+                        )
                     }
                 }
 
-                items(
-                    items = songsList,
-                    key = { it.id }
-                ) { song ->
-                    ProfileSongCard(
-                        song = song,
-                        description = descriptions[song.id]
-                            ?: "No description provided.",
-                        font = fredoka,
-                        onDetails = {
-                            navController.navigate(
-                                "SongScreen/${Uri.encode(song.id)}"
+                ProfileTab.FRIENDS -> {
+                    item {
+                        if (
+                            currentUid != null &&
+                            currentUid == profileUid &&
+                            viewModel.incomingRequests.isNotEmpty()
+                        ) {
+                            Text(
+                                "Friend Requests",
+                                fontFamily = fredoka,
+                                fontSize = 18.sp
                             )
+
+                            Spacer(Modifier.height(8.dp))
+
+                            viewModel.incomingRequests.forEach { requester ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        requester.username,
+                                        fontFamily = fredoka,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    Button(
+                                        onClick = {
+                                            currentUid?.let { uid ->
+                                                viewModel.acceptFriendRequest(
+                                                    uid,
+                                                    requester.uid
+                                                )
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = ProfilePurple
+                                        )
+                                    ) {
+                                        Text("Accept", fontFamily = fredoka)
+                                    }
+
+                                    TextButton(
+                                        onClick = {
+                                            currentUid?.let { uid ->
+                                                viewModel.declineFriendRequest(
+                                                    uid,
+                                                    requester.uid
+                                                )
+                                            }
+                                        }
+                                    ) {
+                                        Text("Decline", fontFamily = fredoka)
+                                    }
+                                }
+                            }
+
+                            HorizontalDivider(color = Color.White)
                         }
-                    )
-                }
-            }
 
-            ProfileTab.FRIENDS -> {
-                item {
-                    if (
-                        currentUid != null &&
-                        currentUid == profileUid &&
-                        viewModel.incomingRequests.isNotEmpty()
-                    ) {
-                        Text(
-                            "Friend Requests",
-                            fontFamily = fredoka,
-                            fontSize = 18.sp
-                        )
+                        if (friendsList.isEmpty()) {
+                            Text("No friends yet.", fontFamily = fredoka)
+                        }
+                    }
 
-                        Spacer(Modifier.height(8.dp))
+                    items(
+                        items = friendsList,
+                        key = { friend ->
+                            friend.uid.ifBlank { friend.username }
+                        }
+                    ) { friend ->
+                        Surface(
+                            color = ProfileCardPurple,
+                            shape = RoundedCornerShape(10.dp),
+                            shadowElevation = 30.dp,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.padding(16.dp)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Image(
+                                        painter = painterResource(R.drawable.default_pfp),
+                                        contentDescription = "Friend profile picture",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .size(90.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                    )
 
-                        viewModel.incomingRequests.forEach { requester ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                            ) {
-                                Text(
-                                    requester.username,
-                                    fontFamily = fredoka,
-                                    modifier = Modifier.weight(1f)
-                                )
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            friend.username,
+                                            fontFamily = fredoka,
+                                            color = Color.White,
+                                            fontSize = 16.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+
+                                        Surface(
+                                            color = Color.White,
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                "About Me",
+                                                fontFamily = fredoka,
+                                                fontSize = 13.sp,
+                                                color = Color(0xFF444444),
+                                                modifier = Modifier.padding(8.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(Modifier.height(12.dp))
 
                                 Button(
                                     onClick = {
-                                        currentUid?.let { uid ->
-                                            viewModel.acceptFriendRequest(
-                                                uid,
-                                                requester.uid
-                                            )
-                                        }
+                                        navController.navigate("ProfileScreen/${friend.uid}/${friend.username}")
                                     },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = ProfilePurple
-                                    )
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text("Accept", fontFamily = fredoka)
+                                    Text("Visit Profile", fontFamily = fredoka)
                                 }
-
-                                TextButton(
-                                    onClick = {
-                                        currentUid?.let { uid ->
-                                            viewModel.declineFriendRequest(
-                                                uid,
-                                                requester.uid
-                                            )
-                                        }
-                                    }
-                                ) {
-                                    Text("Decline", fontFamily = fredoka)
-                                }
-                            }
-                        }
-
-                        HorizontalDivider(color = Color.White)
-                    }
-
-                    if (friendsList.isEmpty()) {
-                        Text("No friends yet.", fontFamily = fredoka)
-                    }
-                }
-
-                items(
-                    items = friendsList,
-                    key = { friend ->
-                        friend.uid.ifBlank { friend.username }
-                    }
-                ) { friend ->
-                    Surface(
-                        color = ProfileCardPurple,
-                        shape = RoundedCornerShape(10.dp),
-                        shadowElevation = 30.dp,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Image(
-                                    painter = painterResource(R.drawable.default_pfp),
-                                    contentDescription = "Friend profile picture",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(90.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                )
-
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        friend.username,
-                                        fontFamily = fredoka,
-                                        color = Color.White,
-                                        fontSize = 16.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-
-                                    Surface(
-                                        color = Color.White,
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                            "About Me",
-                                            fontFamily = fredoka,
-                                            fontSize = 13.sp,
-                                            color = Color(0xFF444444),
-                                            modifier = Modifier.padding(8.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(Modifier.height(12.dp))
-
-                            Button(
-                                onClick = {
-                                    navController.navigate("ProfileScreen/${friend.uid}/${friend.username}")
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = ProfilePurple
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Visit Profile", fontFamily = fredoka)
                             }
                         }
                     }
                 }
-            }
 
-            ProfileTab.CHATS -> {
-                item {
-                    ChatBox(
-                        friendUsernames = friendsList.map { it.username }
-                    )
+                ProfileTab.CHATS -> {
+                    item {
+                        ChatBox(
+                            friendUsernames = friendsList.map { it.username }
+                        )
+                    }
                 }
             }
         }
