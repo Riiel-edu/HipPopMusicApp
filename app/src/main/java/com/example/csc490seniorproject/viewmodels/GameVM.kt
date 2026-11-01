@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.csc490seniorproject.objects.Beatmap
 import com.example.csc490seniorproject.objects.BeatNoteType
+import com.example.csc490seniorproject.objects.PlaybackClock
 import com.example.csc490seniorproject.objects.endStep
 import com.example.csc490seniorproject.objects.stepDurationMs
 import com.example.csc490seniorproject.objects.totalSteps
@@ -198,28 +199,53 @@ class GameVM(application: Application) : AndroidViewModel(application) {
         _holdReleaseEffect.value = null
     }
 
+    private fun getCurrentElapsedMs(): Double {
+        val startTime = PlaybackClock.startTimeNanos
+
+        if (startTime == 0L) return 0.0
+
+        return ((System.nanoTime() - startTime) / 1_000_000.0)
+            .coerceAtLeast(0.0)
+    }
+
     fun start() {
         job?.cancel()
         resetRunState()
 
-        val startTime = System.currentTimeMillis()
+        job = viewModelScope.launch {
 
-        job = viewModelScope.launch(Dispatchers.Default) {
-            var completionStartedAt: Long? = null
+            var completionStartedAt: Double? = null
 
             while (isActive) {
-                val now = System.currentTimeMillis() - startTime
-                _elapsedMs.value = now
 
-                autoMissExpiredNotes(now.toDouble())
+                val startTime = PlaybackClock.startTimeNanos
+
+                if (startTime == 0L) {
+                    delay(1)
+                    continue
+                }
+
+                val elapsedNanos = System.nanoTime() - startTime
+
+                if (elapsedNanos < 0L) {
+                    delay(1)
+                    continue
+                }
+
+                val now = elapsedNanos / 1_000_000.0
+
+                _elapsedMs.value = now.toLong()
+
+                autoMissExpiredNotes(now)
 
                 val allJudged =
                     _judgedNoteIds.value.size >= fallingNotes.size
 
-                val noActiveHolds = _activeHolds.value.isEmpty()
+                val noActiveHolds =
+                    _activeHolds.value.isEmpty()
 
-                // All notes must be judged and every hold must be released.
-                val gameplayComplete = allJudged && noActiveHolds
+                val gameplayComplete =
+                    allJudged && noActiveHolds
 
                 if (gameplayComplete) {
                     if (completionStartedAt == null) {
@@ -232,7 +258,6 @@ class GameVM(application: Application) : AndroidViewModel(application) {
                         break
                     }
                 } else {
-                    // Do not count down toward game over while a hold remains.
                     completionStartedAt = null
                 }
 
@@ -276,7 +301,7 @@ class GameVM(application: Application) : AndroidViewModel(application) {
     fun onLanePress(column: Int) {
         if (_isGameOver.value) return
 
-        val now = _elapsedMs.value.toDouble()
+        val now = getCurrentElapsedMs()
         val judged = _judgedNoteIds.value
 
         val candidate = fallingNotes
@@ -302,7 +327,7 @@ class GameVM(application: Application) : AndroidViewModel(application) {
             _activeHolds.value = _activeHolds.value + (
                     column to ActiveHold(
                         noteId = candidate.id,
-                        pressStartMs = _elapsedMs.value,
+                        pressStartMs = now.toLong(),
                         basePoints = judgment.points,
                         multiplier = multiplier,
                         maxHoldMs = candidate.releaseTimeMs - candidate.hitTimeMs
@@ -332,7 +357,7 @@ class GameVM(application: Application) : AndroidViewModel(application) {
         _activeHoldColumns.value = _activeHolds.value.keys
 
         val heldMs = (
-                _elapsedMs.value - active.pressStartMs
+                getCurrentElapsedMs().toLong() - active.pressStartMs
                 ).coerceIn(0L, active.maxHoldMs.toLong())
 
         val secondsHeld = heldMs / 1000.0

@@ -77,13 +77,25 @@ fun GameScreen(viewModel: GameVM, beatmap: Beatmap, navController: NavController
 
     LaunchedEffect(beatmap.id) {
         viewModel.loadBeatmap(beatmap)
-        workspaceViewModel.prepareSong()
-        viewModel.start()
-        workspaceViewModel.playSongFromStart(startDelayMs = GameVM.LEAD_IN_MS.toLong())
+
+        val songLoaded = workspaceViewModel.loadSongById(beatmap.songId)
+
+        if (songLoaded) {
+            workspaceViewModel.prepareSong()
+
+            viewModel.start()
+
+            workspaceViewModel.playSongFromStart(
+                startDelayMs = GameVM.LEAD_IN_MS.toLong()
+            )
+        }
     }
 
     DisposableEffect(Unit) {
-        onDispose { workspaceViewModel.stopSong() }
+        onDispose {
+            viewModel.stop()
+            workspaceViewModel.stopSong()
+        }
     }
 
     val elapsedMs by viewModel.elapsedMs.collectAsState()
@@ -103,7 +115,10 @@ fun GameScreen(viewModel: GameVM, beatmap: Beatmap, navController: NavController
     val holdReleaseEffect by viewModel.holdReleaseEffect.collectAsState()
 
     LaunchedEffect(isGameOver) {
-        if (isGameOver) workspaceViewModel.stopSong()
+        if (isGameOver) {
+            workspaceViewModel.stopSong()
+            viewModel.stop()
+        }
     }
 
     val colors = laneColors(beatmap.columnCount)
