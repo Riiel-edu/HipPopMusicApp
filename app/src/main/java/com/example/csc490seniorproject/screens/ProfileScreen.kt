@@ -77,6 +77,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import com.google.firebase.firestore.Filter
 import com.google.firebase.firestore.SetOptions
 
 private enum class ProfileTab { SONGS, FRIENDS, CHATS }
@@ -224,56 +225,82 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
         songsList.clear()
         descriptions.clear()
         songsError = null
-        songsLoading = !profileUid.isNullOrBlank() && currentUid != null
 
-        val listener = if (
-            !profileUid.isNullOrBlank() && currentUid != null
-        ) {
-            db.collection("songs")
-                .whereEqualTo("ownerId", profileUid)
-                .addSnapshotListener { snapshot, exception ->
-                    if (active) {
-                        songsLoading = false
+        val myUid = currentUid
+        val targetUid = profileUid
 
-                        if (exception != null) {
-                            songsError = exception.localizedMessage
-                                ?: "Unable to load songs."
-                        } else {
-                            try {
-                                val documents = snapshot?.documents.orEmpty()
+        songsLoading = !targetUid.isNullOrBlank() && myUid != null
 
-                                val songs = documents.mapNotNull { document ->
-                                    document.toObject(Song::class.java)
-                                        ?.copy(id = document.id)
-                                }
+        val listener = if (!targetUid.isNullOrBlank() && myUid != null) {
+            // Viewing your own profile: a plain ownerId == you filter matches
+            // the songs rule's "ownerId == request.auth.uid" branch exactly,
+            // so Firestore can prove it's safe and shows everything you own,
+            // drafts included.
+            //
+            // Viewing a friend's profile: ownerId == them doesn't line up with
+            // any branch of the rule on its own (you're not the owner), so
+            // Firestore can't prove the request is safe and denies it outright
+            // -- even though some of their songs would individually pass. This
+            // query instead asks only for their songs that are published OR
+            // specifically shared with you, which mirrors the rule's other two
+            // branches exactly and is provably safe.
+            val query = if (targetUid == myUid) {
+                db.collection("songs").whereEqualTo("ownerId", targetUid)
+            } else {
+                db.collection("songs").where(
+                    Filter.and(
+                        Filter.equalTo("ownerId", targetUid),
+                        Filter.or(
+                            Filter.equalTo("published", true),
+                            Filter.arrayContains("sharedWith", myUid)
+                        )
+                    )
+                )
+            }
 
-                                val savedDescriptions = documents.associate {
-                                    it.id to (
-                                            it.getString("description")
-                                                ?.takeIf { text ->
-                                                    text.isNotBlank()
-                                                }
-                                                ?: "No description provided."
-                                            )
-                                }
+            query.addSnapshotListener { snapshot, exception ->
+                if (active) {
+                    songsLoading = false
 
-                                songsList.clear()
-                                songsList.addAll(
-                                    songs.sortedBy {
-                                        it.name.lowercase(Locale.ROOT)
-                                    }
-                                )
+                    if (exception != null) {
+                        songsError = exception.localizedMessage
+                            ?: "Unable to load songs."
+                    } else {
+                        try {
+                            val documents = snapshot?.documents.orEmpty()
 
-                                descriptions.clear()
-                                descriptions.putAll(savedDescriptions)
-                                songsError = null
-                            } catch (exception: Exception) {
-                                songsError = exception.localizedMessage
-                                    ?: "Unable to read song details."
+                            val songs = documents.mapNotNull { document ->
+                                document.toObject(Song::class.java)
+                                    ?.copy(id = document.id)
                             }
+
+                            val savedDescriptions = documents.associate {
+                                it.id to (
+                                        it.getString("description")
+                                            ?.takeIf { text ->
+                                                text.isNotBlank()
+                                            }
+                                            ?: "No description provided."
+                                        )
+                            }
+
+                            songsList.clear()
+                            songsList.addAll(
+                                songs.sortedBy {
+                                    it.name.lowercase(Locale.ROOT)
+                                }
+                            )
+
+                            descriptions.clear()
+                            descriptions.putAll(savedDescriptions)
+                            songsError = null
+                        } catch (exception: Exception) {
+                            songsError = exception.localizedMessage
+                                ?: "Unable to read song details."
                         }
                     }
                 }
+            }
         } else {
             null
         }
@@ -515,7 +542,7 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
 
                                 }
                                 isEditing = !isEditing
-                                      },
+                            },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = ProfilePurple
                             )
