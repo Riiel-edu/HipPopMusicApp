@@ -327,39 +327,44 @@ class ProfileScreenVM(application: Application) : AndroidViewModel(application) 
 
                     aboutMe = document.getString("aboutMe") ?: ""
 
-                    val savedPictureUrl =
-                        document.getString("profilePictureUrl") ?: ""
+                    println("PROFILE: Loading profile picture from Storage")
 
-                    println("PROFILE: Raw profilePictureUrl = $savedPictureUrl")
-                    println("PROFILE: Picture URL is blank = ${savedPictureUrl.isBlank()}")
-                    println("PROFILE: Is content URI = ${savedPictureUrl.startsWith("content://")}")
-                    println("PROFILE: Is HTTP URL = ${savedPictureUrl.startsWith("http://") || savedPictureUrl.startsWith("https://")}")
+                    val storageRef = FirebaseStorage.getInstance()
+                        .reference
+                        .child("profilePictures/$myUid.jpg")
 
-                    profilePictureUrl = savedPictureUrl
+                    storageRef.downloadUrl
+                        .addOnSuccessListener { downloadUri ->
+                            profilePictureUrl = downloadUri.toString()
+                            println("PROFILE: Storage picture URL = $profilePictureUrl")
+                        }
+                        .addOnFailureListener { e ->
+                            println("PROFILE: Failed to get profile picture from Storage: ${e.message}")
+                            profilePictureUrl = ""
+                        }
+                        .addOnCompleteListener {
+                            if (displayName.isNullOrBlank()) {
+                                println("FIREBASE: displayName is blank; updating it")
 
-                    println("PROFILE: Assigned profilePictureUrl = $profilePictureUrl")
-
-                    if (displayName.isNullOrBlank()) {
-                        println("FIREBASE: displayName is blank; updating it")
-
-                        db.collection("users").document(myUid)
-                            .set(
-                                mapOf("displayName" to username),
-                                com.google.firebase.firestore.SetOptions.merge()
-                            )
-                            .addOnSuccessListener {
-                                println("FIREBASE: Created displayName = $username")
+                                db.collection("users").document(myUid)
+                                    .set(
+                                        mapOf("displayName" to username),
+                                        com.google.firebase.firestore.SetOptions.merge()
+                                    )
+                                    .addOnSuccessListener {
+                                        println("FIREBASE: Created displayName = $username")
+                                        onLoaded()
+                                    }
+                                    .addOnFailureListener { e ->
+                                        println("FIREBASE: Failed to create displayName: ${e.message}")
+                                        e.printStackTrace()
+                                        onLoaded()
+                                    }
+                            } else {
+                                println("FIREBASE: Loaded displayName = $displayName")
                                 onLoaded()
                             }
-                            .addOnFailureListener { e ->
-                                println("FIREBASE: Failed to create displayName: ${e.message}")
-                                e.printStackTrace()
-                                onLoaded()
-                            }
-                    } else {
-                        println("FIREBASE: Loaded displayName = $displayName")
-                        onLoaded()
-                    }
+                        }
                 } else {
                     println("FIREBASE: User document does not exist for UID = $myUid")
                     onLoaded()
@@ -373,36 +378,17 @@ class ProfileScreenVM(application: Application) : AndroidViewModel(application) 
     }
 
     fun uploadProfilePicture(uid: String, imageUri: Uri) {
-        println("PROFILE: Starting image upload: $imageUri")
+        println("PROFILE: Starting image upload")
 
-        val imageRef = FirebaseStorage.getInstance()
+        val storageRef = FirebaseStorage.getInstance(
+            "gs://senior-project-13e67.firebasestorage.app"
+        )
             .reference
             .child("profilePictures/$uid.jpg")
 
-        imageRef.putFile(imageUri)
+        storageRef.putFile(imageUri)
             .addOnSuccessListener {
-                println("PROFILE: Image uploaded successfully")
-
-                imageRef.downloadUrl
-                    .addOnSuccessListener { downloadUri ->
-                        val url = downloadUri.toString()
-
-                        println("PROFILE: Generated download URL = $url")
-
-                        db.collection("users")
-                            .document(uid)
-                            .update("profilePictureUrl", url)
-                            .addOnSuccessListener {
-                                profilePictureUrl = url
-                                println("PROFILE: Download URL saved successfully")
-                            }
-                            .addOnFailureListener { e ->
-                                println("PROFILE: Failed to save URL: ${e.message}")
-                            }
-                    }
-                    .addOnFailureListener { e ->
-                        println("PROFILE: Failed to get download URL: ${e.message}")
-                    }
+                println("PROFILE: Image uploaded successfully to Storage!")
             }
             .addOnFailureListener { e ->
                 println("PROFILE: Image upload failed: ${e.message}")
@@ -414,7 +400,6 @@ class ProfileScreenVM(application: Application) : AndroidViewModel(application) 
         val profileData = mapOf(
             "displayName" to profileUsername,
             "aboutMe" to aboutMe,
-            "profilePictureUrl" to profilePictureUrl
         )
 
         db.collection("users").document(myUid)
