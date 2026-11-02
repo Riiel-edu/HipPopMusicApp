@@ -6,6 +6,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +26,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,12 +40,6 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import java.util.Locale
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 
 @Composable
 fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavController) {
@@ -100,19 +98,15 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
     var songTags by remember(songId) {
         mutableStateOf<List<String>>(emptyList())
     }
-
     var showSongTagEditor by remember(songId) {
         mutableStateOf(false)
     }
-
     var selectedSongTags by remember(songId) {
         mutableStateOf(setOf<String>())
     }
-
     var savingSongTags by remember(songId) {
         mutableStateOf(false)
     }
-
     var songTagError by remember(songId) {
         mutableStateOf<String?>(null)
     }
@@ -120,15 +114,12 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
     var creatorUsername by remember(songId) {
         mutableStateOf("Loading creator…")
     }
-
     var creatorAboutMe by remember(songId) {
         mutableStateOf("No description provided.")
     }
-
     var creatorProfilePictureUrl by remember(songId) {
         mutableStateOf("")
     }
-
     var creatorProfileLoading by remember(songId) {
         mutableStateOf(true)
     }
@@ -195,8 +186,7 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
                     if (active) {
                         when {
                             error != null -> {
-                                songLoadError =
-                                    "Unable to load song details."
+                                songLoadError = "Unable to load song details."
                                 songName = "Unable to load song"
                             }
 
@@ -206,30 +196,27 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
                             }
 
                             else -> {
-                                ownerId = document
-                                    .getString("ownerId")
-                                    .orEmpty()
-
+                                ownerId = document.getString("ownerId").orEmpty()
                                 songLoadError = null
+
                                 songName = document.getString("name")
                                     ?: "Untitled Song"
 
-                                songRating = (
-                                        document.get("rating") as? Number
-                                        )?.toDouble()?.coerceIn(0.0, 5.0) ?: 0.0
+                                songRating = (document.get("rating") as? Number)
+                                    ?.toDouble()
+                                    ?.coerceIn(0.0, 5.0)
+                                    ?: 0.0
 
-                                ratingCount = (
-                                        document.get("ratingCount") as? Number
-                                        )?.toInt() ?: 0
+                                ratingCount =
+                                    (document.get("ratingCount") as? Number)
+                                        ?.toInt() ?: 0
 
-                                songDescription = document
-                                    .getString("description")
-                                    ?.takeIf { it.isNotBlank() }
-                                    ?: "No description provided."
+                                songDescription =
+                                    document.getString("description")
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?: "No description provided."
 
-                                songTags = document
-                                    .get("tags")
-                                    ?.let { it as? List<*> }
+                                songTags = (document.get("tags") as? List<*>)
                                     .orEmpty()
                                     .filterIsInstance<String>()
                                     .filter { it in musicGenres }
@@ -264,22 +251,20 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
                     if (active) {
                         creatorProfileLoading = false
 
-                        if (error == null && document != null &&
+                        if (error == null &&
+                            document != null &&
                             document.exists()
                         ) {
-                            creatorUsername = document
-                                .getString("username")
+                            creatorUsername = document.getString("username")
                                 ?.takeIf { it.isNotBlank() }
                                 ?: "Unknown user"
 
-                            creatorAboutMe = document
-                                .getString("aboutMe")
+                            creatorAboutMe = document.getString("aboutMe")
                                 ?.takeIf { it.isNotBlank() }
                                 ?: "No description provided."
 
-                            creatorProfilePictureUrl = document
-                                .getString("profilePictureUrl")
-                                .orEmpty()
+                            creatorProfilePictureUrl =
+                                document.getString("profilePictureUrl").orEmpty()
                         } else {
                             creatorUsername = "Unknown user"
                             creatorAboutMe = "Unable to load creator details."
@@ -331,12 +316,12 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
         }
     }
 
-    // Load the current user's existing rating.
     DisposableEffect(songId, currentUid) {
         var active = true
         myRating = 0
 
         val uid = currentUid
+
         val listener = if (songId.isNotBlank() && uid != null) {
             FirebaseFirestore.getInstance()
                 .collection("songs")
@@ -345,8 +330,7 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
                 .document(uid)
                 .addSnapshotListener { document, error ->
                     if (active && error == null) {
-                        myRating = document
-                            ?.getLong("rating")
+                        myRating = document?.getLong("rating")
                             ?.toInt()
                             ?.takeIf { it in 1..5 }
                             ?: 0
@@ -399,11 +383,7 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
                                 contentPadding = PaddingValues(2.dp)
                             ) {
                                 Text(
-                                    text = if (star <= selectedRating) {
-                                        "★"
-                                    } else {
-                                        "☆"
-                                    },
+                                    text = if (star <= selectedRating) "★" else "☆",
                                     color = if (star <= selectedRating) {
                                         purple
                                     } else {
@@ -476,13 +456,10 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
         )
     }
 
-
     if (showSongTagEditor && canEditSongTags) {
         AlertDialog(
             onDismissRequest = {
-                if (!savingSongTags) {
-                    showSongTagEditor = false
-                }
+                if (!savingSongTags) showSongTagEditor = false
             },
             title = {
                 Text(
@@ -526,18 +503,18 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
                                 },
                                 enabled = !savingSongTags,
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFF5D36EB),
+                                    selectedContainerColor = purple,
                                     selectedLabelColor = Color.White,
-                                    containerColor = Color(0xFFbfb1fa),
+                                    containerColor = Color(0xFFBFB1FA),
                                     labelColor = Color.White
                                 )
                             )
                         }
                     }
 
-                    songTagError?.let { error ->
+                    songTagError?.let {
                         Text(
-                            text = error,
+                            text = it,
                             color = Color.Red,
                             fontSize = 12.sp
                         )
@@ -568,33 +545,27 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
                                     savingSongTags = false
                                     showSongTagEditor = false
                                 }
-                                .addOnFailureListener { exception ->
+                                .addOnFailureListener {
                                     savingSongTags = false
-                                    songTagError =
-                                        exception.localizedMessage
-                                            ?: "Unable to save song tags."
+                                    songTagError = it.localizedMessage
+                                        ?: "Unable to save song tags."
                                 }
                         }
                     }
                 ) {
-                    Text(
-                        if (savingSongTags) "Saving..." else "Save"
-                    )
+                    Text(if (savingSongTags) "Saving..." else "Save")
                 }
             },
             dismissButton = {
                 TextButton(
                     enabled = !savingSongTags,
-                    onClick = {
-                        showSongTagEditor = false
-                    }
+                    onClick = { showSongTagEditor = false }
                 ) {
                     Text("Cancel")
                 }
             }
         )
     }
-
 
     if (showDescriptionEditor && canEditDescription) {
         AlertDialog(
@@ -661,9 +632,7 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
                         }
                     }
                 ) {
-                    Text(
-                        if (savingDescription) "Saving…" else "Save"
-                    )
+                    Text(if (savingDescription) "Saving…" else "Save")
                 }
             },
             dismissButton = {
@@ -715,7 +684,7 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
                     .heightIn(min = 120.dp)
                     .padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
-            ){
+            ) {
                 Text(
                     text = songName,
                     fontFamily = fredoka,
@@ -744,11 +713,7 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
 
                     Text(
                         text = if (ratingCount > 0) {
-                            String.format(
-                                Locale.US,
-                                "%.1f/5.0",
-                                songRating
-                            )
+                            String.format(Locale.US, "%.1f/5.0", songRating)
                         } else {
                             "0.0/5.0"
                         },
@@ -837,11 +802,16 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
 
         Spacer(Modifier.height(20.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Button(
                 onClick = {
                     if (songId.isNotBlank() && songLoadError == null) {
-                        navController.navigate("GameScreen/${Uri.encode(songId)}")
+                        navController.navigate(
+                            "GameScreen/${Uri.encode(songId)}"
+                        )
                     }
                 },
                 enabled = songId.isNotBlank() && songLoadError == null,
@@ -874,10 +844,15 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
                 contentPadding = PaddingValues(
                     horizontal = 16.dp,
                     vertical = 4.dp
-                ),modifier = Modifier.weight(1f)
+                ),
+                modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = if (myRating > 0) "★ Change rating" else "★ Rate",
+                    text = if (myRating > 0) {
+                        "★ Change rating"
+                    } else {
+                        "★ Rate"
+                    },
                     fontFamily = fredoka,
                     color = Color.White,
                     fontSize = 16.sp
@@ -1109,9 +1084,12 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
 
                 Button(
                     onClick = {
-                        if (ownerId.isNotBlank() && creatorUsername != "Unknown user") {
+                        if (ownerId.isNotBlank() &&
+                            creatorUsername != "Unknown user"
+                        ) {
                             navController.navigate(
-                                "ProfileScreen/${Uri.encode(ownerId)}/${Uri.encode(creatorUsername)}"
+                                "ProfileScreen/${Uri.encode(ownerId)}/" +
+                                        Uri.encode(creatorUsername)
                             )
                         }
                     },
@@ -1173,6 +1151,20 @@ private fun SongFeaturePopup(
         mutableStateOf("")
     }
 
+    // The owner can turn new comments on or off.
+    var commentsEnabled by remember(songId, currentUid) {
+        mutableStateOf(true)
+    }
+    var commentSettingsLoaded by remember(songId, currentUid) {
+        mutableStateOf(false)
+    }
+    var savingCommentSettings by remember(songId, currentUid) {
+        mutableStateOf(false)
+    }
+    var commentSettingsError by remember(songId, currentUid) {
+        mutableStateOf<String?>(null)
+    }
+
     var maps by remember(songId, currentUid) {
         mutableStateOf<List<LeaderboardMap>>(emptyList())
     }
@@ -1226,16 +1218,31 @@ private fun SongFeaturePopup(
     DisposableEffect(songId, currentUid) {
         var active = true
         songOwnerId = ""
+        commentSettingsLoaded = false
+        commentSettingsError = null
 
         val listener = if (songId.isNotBlank() && currentUid != null) {
             db.collection("songs")
                 .document(songId)
                 .addSnapshotListener { document, exception ->
                     if (active) {
-                        songOwnerId = if (exception == null) {
-                            document?.getString("ownerId").orEmpty()
+                        if (exception != null ||
+                            document == null ||
+                            !document.exists()
+                        ) {
+                            songOwnerId = ""
+                            commentSettingsLoaded = false
+                            commentSettingsError =
+                                "Unable to load comment settings."
                         } else {
-                            ""
+                            songOwnerId =
+                                document.getString("ownerId").orEmpty()
+
+                            commentsEnabled =
+                                document.getBoolean("commentsEnabled") ?: true
+
+                            commentSettingsLoaded = true
+                            commentSettingsError = null
                         }
                     }
                 }
@@ -1353,29 +1360,27 @@ private fun SongFeaturePopup(
                                         ?.takeIf { it.isNotBlank() }
                                         ?: "User",
                                     score = doc.getLong("score") ?: 0L,
-                                    stars = (doc.getLong("stars") ?: 0L).toInt().coerceIn(0, 5)
+                                    stars = (doc.getLong("stars") ?: 0L)
+                                        .toInt()
+                                        .coerceIn(0, 5)
                                 )
                             }
                         } else {
-                            comments =
-                                snapshot?.documents.orEmpty().map { doc ->
-                                    val uid =
-                                        doc.getString("userId").orEmpty()
+                            comments = snapshot?.documents.orEmpty().map { doc ->
+                                val uid = doc.getString("userId").orEmpty()
 
-                                    loadUsername(uid)
+                                loadUsername(uid)
 
-                                    SongComment(
-                                        id = doc.id,
-                                        userId = uid,
-                                        text = doc.getString("text").orEmpty(),
-                                        hidden =
-                                            doc.getBoolean("hidden") ?: false,
-                                        likedBy =
-                                            (doc.get("likedBy") as? List<*>)
-                                                .orEmpty()
-                                                .filterIsInstance<String>()
-                                    )
-                                }
+                                SongComment(
+                                    id = doc.id,
+                                    userId = uid,
+                                    text = doc.getString("text").orEmpty(),
+                                    hidden = doc.getBoolean("hidden") ?: false,
+                                    likedBy = (doc.get("likedBy") as? List<*>)
+                                        .orEmpty()
+                                        .filterIsInstance<String>()
+                                )
+                            }
                         }
                     } catch (e: Exception) {
                         error = e.localizedMessage
@@ -1391,8 +1396,10 @@ private fun SongFeaturePopup(
         }
     }
 
-    val visibleComments = comments.filter {
-        !it.hidden || isSongOwner
+    val visibleComments = if (commentSettingsLoaded && commentsEnabled) {
+        comments.filter { !it.hidden || isSongOwner }
+    } else {
+        emptyList()
     }
 
     Dialog(onDismissRequest = onClose) {
@@ -1436,6 +1443,71 @@ private fun SongFeaturePopup(
                     Text(it, color = Color.Red)
                 }
 
+                // Only the song owner sees this switch.
+                if (!leaderboard && songId.isNotBlank()) {
+                    if (isSongOwner && commentSettingsLoaded) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Allow comments",
+                                color = purple,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            Switch(
+                                checked = commentsEnabled,
+                                enabled = !savingCommentSettings && !sending,
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = purple
+                                ),
+                                onCheckedChange = { enabled ->
+                                    if (auth.currentUser?.uid == songOwnerId) {
+                                        val previousValue = commentsEnabled
+
+                                        commentsEnabled = enabled
+                                        savingCommentSettings = true
+                                        commentSettingsError = null
+
+                                        db.collection("songs")
+                                            .document(songId)
+                                            .update("commentsEnabled", enabled)
+                                            .addOnSuccessListener {
+                                                savingCommentSettings = false
+                                            }
+                                            .addOnFailureListener { exception ->
+                                                commentsEnabled = previousValue
+                                                savingCommentSettings = false
+                                                commentSettingsError =
+                                                    exception.localizedMessage
+                                                        ?: "Unable to save comment settings."
+                                            }
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    if (commentSettingsLoaded && !commentsEnabled) {
+                        Text(
+                            text = "Comments are turned off.",
+                            color = Color.Gray,
+                            fontSize = 13.sp
+                        )
+                    }
+
+                    commentSettingsError?.let {
+                        Text(
+                            text = it,
+                            color = Color.Red,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1467,7 +1539,8 @@ private fun SongFeaturePopup(
                         songId.isNotBlank() &&
                         currentUid != null
                     ) {
-                        if (!leaderboard && visibleComments.isEmpty()) {
+                        if (!leaderboard && commentsEnabled && commentSettingsLoaded && visibleComments.isEmpty()
+                        ) {
                             item {
                                 Text("No comments yet.")
                             }
@@ -1491,16 +1564,24 @@ private fun SongFeaturePopup(
                             val isMe = entry.userId == currentUid
 
                             val rankColor = when (index) {
-                                0 -> Color(0xFFFFB300)   // gold
-                                1 -> Color(0xFF9E9E9E)   // silver
-                                2 -> Color(0xFFB87333)   // bronze
+                                0 -> Color(0xFFFFB300)
+                                1 -> Color(0xFF9E9E9E)
+                                2 -> Color(0xFFB87333)
                                 else -> Color.White
                             }
 
                             Surface(
-                                color = if (isMe) Color(0xFFD6C8FF) else Color(0xFFE9E2FF),
+                                color = if (isMe) {
+                                    Color(0xFFD6C8FF)
+                                } else {
+                                    Color(0xFFE9E2FF)
+                                },
                                 shape = RoundedCornerShape(12.dp),
-                                border = if (isMe) BorderStroke(2.dp, purple) else null,
+                                border = if (isMe) {
+                                    BorderStroke(2.dp, purple)
+                                } else {
+                                    null
+                                },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
@@ -1516,7 +1597,9 @@ private fun SongFeaturePopup(
                                         modifier = Modifier.widthIn(min = 36.dp)
                                     )
 
-                                    Column(modifier = Modifier.weight(1f)) {
+                                    Column(
+                                        modifier = Modifier.weight(1f)
+                                    ) {
                                         Text(
                                             text = entry.username,
                                             color = Color.White,
@@ -1524,8 +1607,10 @@ private fun SongFeaturePopup(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
+
                                         Text(
-                                            text = "★".repeat(entry.stars) + "☆".repeat(5 - entry.stars),
+                                            text = "★".repeat(entry.stars) +
+                                                    "☆".repeat(5 - entry.stars),
                                             color = purple,
                                             fontSize = 14.sp
                                         )
@@ -1567,7 +1652,11 @@ private fun SongFeaturePopup(
                             if (it.length <= 1000) draft = it
                         },
                         label = { Text("Write a comment") },
-                        enabled = !sending && currentUid != null,
+                        enabled = !sending &&
+                                currentUid != null &&
+                                commentSettingsLoaded &&
+                                commentsEnabled &&
+                                !savingCommentSettings,
                         maxLines = 3,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1575,7 +1664,10 @@ private fun SongFeaturePopup(
                     Button(
                         enabled = draft.isNotBlank() &&
                                 !sending &&
-                                currentUid != null,
+                                currentUid != null &&
+                                commentSettingsLoaded &&
+                                commentsEnabled &&
+                                !savingCommentSettings,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = purple
@@ -1586,6 +1678,10 @@ private fun SongFeaturePopup(
 
                             if (uid == null) {
                                 postError = "Please log in first."
+                            } else if (
+                                !commentSettingsLoaded || !commentsEnabled
+                            ) {
+                                postError = "Comments are turned off."
                             } else if (message.isNotEmpty()) {
                                 sending = true
                                 postError = null
@@ -1689,7 +1785,6 @@ private fun ManagedCommentCard(
                     modifier = Modifier.weight(1f)
                 )
 
-                // Like button: immediately LEFT of the three dots.
                 TextButton(
                     enabled = currentUid != null &&
                             !busy &&
@@ -1749,7 +1844,6 @@ private fun ManagedCommentCard(
                     )
                 }
 
-                // Three-dot menu.
                 if (isCommentAuthor || isSongOwner) {
                     Box {
                         IconButton(
