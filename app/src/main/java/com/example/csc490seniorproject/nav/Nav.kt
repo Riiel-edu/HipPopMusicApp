@@ -220,13 +220,30 @@ fun Nav(
         }
 
         composable(
-            route = "GameScreen/{songId}",
-            arguments = listOf(navArgument("songId") { type = NavType.StringType })
+            route = "GameScreen/{songId}?roomId={roomId}",
+            arguments = listOf(
+                navArgument("songId") {
+                    type = NavType.StringType
+                },
+                navArgument("roomId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
         ) { entry ->
-            val songId = entry.arguments?.getString("songId") ?: return@composable
+
+            val songId = entry.arguments?.getString("songId")
+                ?: return@composable
+
+            val roomId = entry.arguments?.getString("roomId")
+
             val gameViewModel: GameVM = viewModel()
 
-            val result by produceState<Result<Beatmap?>?>(initialValue = null, songId) {
+            val result by produceState<Result<Beatmap?>?>(
+                initialValue = null,
+                songId
+            ) {
                 value = try {
                     Result.success(SongRepository.loadBeatmap(songId))
                 } catch (e: Exception) {
@@ -235,21 +252,44 @@ fun Nav(
                 }
             }
 
-            val r = result
             when {
-                r == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                r.isFailure -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text("Couldn't load beatmap: ${r.exceptionOrNull()?.message}")
+                result == null -> {
+                    Box(
+                        Modifier.fillMaxSize(),
+                        Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
                 }
-                r.getOrNull() == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text("No beatmap found for this song. Open Edit Beatmap, add notes and save.")
+
+                result!!.isFailure -> {
+                    Box(
+                        Modifier.fillMaxSize(),
+                        Alignment.Center
+                    ) {
+                        Text(
+                            "Couldn't load beatmap: ${result!!.exceptionOrNull()?.message}"
+                        )
+                    }
                 }
-                else -> GameScreen(
-                    viewModel = gameViewModel,
-                    beatmap = r.getOrNull()!!,
-                    navController = navController,
-                    modifier = Modifier
-                )
+
+                result!!.getOrNull() == null -> {
+                    Box(
+                        Modifier.fillMaxSize(),
+                        Alignment.Center
+                    ) {
+                        Text("No beatmap found.")
+                    }
+                }
+
+                else -> {
+                    GameScreen(
+                        viewModel = gameViewModel,
+                        beatmap = result!!.getOrNull()!!,
+                        navController = navController,
+                        multiplayerRoomId = roomId
+                    )
+                }
             }
         }
     }

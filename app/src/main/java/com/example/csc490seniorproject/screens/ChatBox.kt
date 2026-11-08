@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
@@ -33,7 +34,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun ChatBox(modifier: Modifier = Modifier, friendUsernames: List<String> = emptyList()) {
+fun ChatBox(modifier: Modifier, friendUsernames: List<String> = emptyList(), navController: NavController) {
     val db = remember { FirebaseFirestore.getInstance() }
     val auth = remember { FirebaseAuth.getInstance() }
     val chatPurple = Color(0xFF6938EF)
@@ -48,7 +49,12 @@ fun ChatBox(modifier: Modifier = Modifier, friendUsernames: List<String> = empty
         val senderId: String,
         val recipientId: String,
         val text: String,
-        val time: Long
+        val time: Long,
+        val type: String = "TEXT",
+        val beatmapId: String? = null,
+        val songId: String? = null,
+        val beatmapTitle: String? = null,
+        val status: String? = null
     )
 
     var currentUid by remember {
@@ -133,7 +139,333 @@ fun ChatBox(modifier: Modifier = Modifier, friendUsernames: List<String> = empty
             mutableStateOf<String?>(null)
         }
 
+        var showInviteTypeDialog by remember {
+            mutableStateOf(false)
+        }
+
+        var showBeatmapPicker by remember {
+            mutableStateOf(false)
+        }
+
+        var availableBeatmaps by remember {
+            mutableStateOf<List<com.example.csc490seniorproject.objects.Beatmap>>(
+                emptyList()
+            )
+        }
+
+        var loadingBeatmaps by remember {
+            mutableStateOf(false)
+        }
+
+        var sendingInvite by remember {
+            mutableStateOf(false)
+        }
+
+        val handledInvitations = remember {
+            mutableSetOf<String>()
+        }
+
         val listState = rememberLazyListState()
+
+        fun navigateToMultiplayerGame(
+            songId: String,
+            roomId: String
+        ) {
+            selectedUid = null
+
+            navController.navigate(
+                "GameScreen/$songId?roomId=$roomId"
+            ) {
+                launchSingleTop = true
+            }
+        }
+
+        fun loadInviteBeatmaps() {
+            loadingBeatmaps = true
+
+            db.collection("beatmaps")
+                .whereEqualTo("ownerId", uid)
+                .get()
+                .addOnSuccessListener { snapshot ->
+                    availableBeatmaps = snapshot.documents.mapNotNull {
+                        it.toObject(
+                            com.example.csc490seniorproject.objects.Beatmap::class.java
+                        )
+                    }.filter {
+                        it.id.isNotBlank() && it.songId.isNotBlank()
+                    }
+
+                    loadingBeatmaps = false
+                    showBeatmapPicker = true
+                }
+                .addOnFailureListener {
+                    loadingBeatmaps = false
+                    error = it.localizedMessage ?: "Couldn't load beatmaps."
+                }
+        }
+
+        if (showInviteTypeDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showInviteTypeDialog = false
+                },
+                title = {
+                    Text("Send Game Invitation")
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text("What would you like to play?")
+
+                        OutlinedButton(
+                            onClick = {
+                                showInviteTypeDialog = false
+                                loadInviteBeatmaps()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("⚔️  VS")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                // Co-op invitations will be implemented later.
+                                showInviteTypeDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("🤝  Co-op")
+                        }
+                    }
+                },
+                confirmButton = {}
+            )
+        }
+
+        if (showBeatmapPicker) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (!sendingInvite) {
+                        showBeatmapPicker = false
+                    }
+                },
+                title = {
+                    Text("Choose a Beatmap")
+                },
+                text = {
+                    when {
+                        loadingBeatmaps -> {
+                            CircularProgressIndicator()
+                        }
+
+                        availableBeatmaps.isEmpty() -> {
+                            Text("You don't have any beatmaps available.")
+                        }
+
+                        else -> {
+                            LazyColumn(
+                                modifier = Modifier.heightIn(max = 400.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(
+                                    availableBeatmaps,
+                                    key = { it.id }
+                                ) { beatmap ->
+
+                                    Surface(
+                                        onClick = {
+                                            if (!sendingInvite) {
+                                                sendingInvite = true
+
+                                                val recipient = selectedUid
+
+                                                if (
+                                                    recipient == null ||
+                                                    auth.currentUser?.uid != uid
+                                                ) {
+                                                    sendingInvite = false
+                                                    error = "Please reopen the conversation."
+                                                } else {
+                                                    db.collection("chatMessages")
+                                                        .add(
+                                                            hashMapOf(
+                                                                "senderId" to uid,
+                                                                "recipientId" to recipient,
+                                                                "participants" to listOf(
+                                                                    uid,
+                                                                    recipient
+                                                                ),
+                                                                "text" to "Challenge!",
+                                                                "type" to "VS_INVITE",
+                                                                "beatmapId" to beatmap.id,
+                                                                "songId" to beatmap.songId,
+                                                                "beatmapTitle" to beatmap.title,
+                                                                "status" to "PENDING",
+                                                                "createdAt" to FieldValue.serverTimestamp()
+                                                            )
+                                                        )
+                                                        .addOnSuccessListener {
+                                                            sendingInvite = false
+                                                            showBeatmapPicker = false
+                                                        }
+                                                        .addOnFailureListener {
+                                                            sendingInvite = false
+                                                            error = it.localizedMessage
+                                                                ?: "Couldn't send invitation."
+                                                        }
+                                                }
+                                            }
+                                        },
+                                        enabled = !sendingInvite,
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = Color(0xFFF7F4FF),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(12.dp)
+                                        ) {
+                                            Text(
+                                                text = beatmap.title,
+                                                fontWeight = FontWeight.Bold
+                                            )
+
+                                            Text(
+                                                text = "${beatmap.bpm} BPM • ${beatmap.columnCount} lanes",
+                                                color = Color.Gray,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = !sendingInvite,
+                        onClick = {
+                            showBeatmapPicker = false
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+
+        fun acceptVsInvite(message: MessengerMessage) {
+            if (auth.currentUser?.uid != uid) {
+                error = "Please log in again."
+                return
+            }
+
+            if (
+                message.recipientId != uid ||
+                message.type != "VS_INVITE" ||
+                message.status != "PENDING"
+            ) {
+                error = "This invitation is no longer available."
+                return
+            }
+
+            val beatmapId = message.beatmapId
+            val songId = message.songId
+
+            if (beatmapId.isNullOrBlank() || songId.isNullOrBlank()) {
+                error = "This invitation has invalid beatmap information."
+                return
+            }
+
+            sendingInvite = true
+            error = ""
+
+            val inviteRef = db.collection("chatMessages")
+                .document(message.id)
+
+            val roomRef = db.collection("multiplayerRooms")
+                .document(message.id)
+
+            db.runTransaction { transaction ->
+
+                val invite = transaction.get(inviteRef)
+
+                check(invite.exists()) {
+                    "Invitation does not exist."
+                }
+
+                check(invite.getString("type") == "VS_INVITE") {
+                    "Invalid invitation."
+                }
+
+                check(invite.getString("recipientId") == uid) {
+                    "You aren't the recipient."
+                }
+
+                check(invite.getString("status") == "PENDING") {
+                    "Invitation already handled."
+                }
+
+                check(invite.getString("beatmapId") == beatmapId &&
+                        invite.getString("songId") == songId) {
+                    "Invitation data changed."
+                }
+
+                val senderId = invite.getString("senderId")
+                    ?: throw IllegalStateException("Missing sender.")
+
+                transaction.set(
+                    roomRef,
+                    mapOf(
+                        "hostId" to senderId,
+                        "opponentId" to uid,
+                        "playerIds" to listOf(senderId, uid),
+                        "beatmapId" to beatmapId,
+                        "songId" to songId,
+                        "status" to "playing",
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )
+                )
+
+                transaction.update(
+                    inviteRef,
+                    "status",
+                    "ACCEPTED"
+                )
+
+                message.id
+
+            }.addOnSuccessListener { roomId ->
+
+                sendingInvite = false
+                error = ""
+
+            }.addOnFailureListener { exception ->
+
+                sendingInvite = false
+                error = exception.localizedMessage
+                    ?: "Couldn't accept invitation."
+            }
+        }
+
+        fun declineVsInvite(message: MessengerMessage) {
+            if (auth.currentUser?.uid != uid ||
+                message.recipientId != uid ||
+                message.status != "PENDING"
+            ) {
+                error = "This invitation is no longer available."
+                return
+            }
+
+            db.collection("chatMessages")
+                .document(message.id)
+                .update("status", "DECLINED")
+                .addOnFailureListener {
+                    error = it.localizedMessage ?: "Couldn't decline invitation."
+                }
+        }
 
         // Load sent and received messages.
         DisposableEffect(uid) {
@@ -165,7 +497,12 @@ fun ChatBox(modifier: Modifier = Modifier, friendUsernames: List<String> = empty
                                             .getTimestamp("createdAt")
                                             ?.toDate()
                                             ?.time
-                                            ?: Long.MAX_VALUE
+                                            ?: Long.MAX_VALUE,
+                                        type = document.getString("type") ?: "TEXT",
+                                        beatmapId = document.getString("beatmapId"),
+                                        songId = document.getString("songId"),
+                                        beatmapTitle = document.getString("beatmapTitle"),
+                                        status = document.getString("status")
                                     )
                                 }
                                 .sortedWith(
@@ -173,8 +510,33 @@ fun ChatBox(modifier: Modifier = Modifier, friendUsernames: List<String> = empty
                                         .thenBy { it.id }
                                 )
 
+                            val previouslyKnownMessages = messages.associateBy { it.id }
+
                             messages.clear()
                             messages.addAll(updated)
+
+                            val newlyAcceptedInvite = updated.firstOrNull { message ->
+                                message.type == "VS_INVITE" &&
+                                        message.status == "ACCEPTED" &&
+                                        (message.senderId == uid || message.recipientId == uid) &&
+                                        previouslyKnownMessages[message.id]?.status == "PENDING" &&
+                                        message.id !in handledInvitations
+                            }
+
+                            newlyAcceptedInvite?.let { invite ->
+
+                                val songId = invite.songId
+                                val roomId = invite.id
+
+                                if (!songId.isNullOrBlank()) {
+                                    handledInvitations.add(roomId)
+
+                                    navigateToMultiplayerGame(
+                                        songId = songId,
+                                        roomId = roomId
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -734,6 +1096,18 @@ fun ChatBox(modifier: Modifier = Modifier, friendUsernames: List<String> = empty
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+
+                        IconButton(
+                            enabled = !sending && !deleting && !sendingInvite,
+                            onClick = {
+                                showInviteTypeDialog = true
+                            }
+                        ) {
+                            Text(
+                                text = "🎮",
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(12.dp))
@@ -759,40 +1133,141 @@ fun ChatBox(modifier: Modifier = Modifier, friendUsernames: List<String> = empty
                             }
                         }
 
-                        // Message bubbles have no delete buttons.
                         items(
                             conversation,
                             key = { it.id }
                         ) { message ->
+
                             val mine = message.senderId == uid
+                            val isVsInvite = message.type == "VS_INVITE"
 
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.    fillMaxWidth(),
                                 horizontalArrangement = if (mine) {
                                     Arrangement.End
                                 } else {
                                     Arrangement.Start
                                 }
                             ) {
-                                Surface(
-                                    color = if (mine) {
-                                        chatPurple
-                                    } else {
-                                        Color.White
-                                    },
-                                    shape = RoundedCornerShape(18.dp),
-                                    modifier = Modifier.widthIn(max = 260.dp)
-                                ) {
-                                    Text(
-                                        text = message.text,
-                                        color = if (mine) {
-                                            Color.White
-                                        } else {
-                                            Color.DarkGray
-                                        },
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp
+                                if (isVsInvite) {
+
+                                    Surface(
+                                        color = Color.White,
+                                        shape = RoundedCornerShape(18.dp),
+                                        modifier = Modifier.widthIn(max = 280.dp)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(14.dp),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Text(
+                                                text = "⚔️ VS CHALLENGE",
+                                                fontWeight = FontWeight.Bold,
+                                                color = chatPurple
+                                            )
+
+                                            Text(
+                                                text = message.beatmapTitle
+                                                    ?: "Unknown Beatmap",
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+
+                                            Text(
+                                                text = if (mine) {
+                                                    "You challenged your friend!"
+                                                } else {
+                                                    "${people[message.senderId]?.username ?: "Your friend"} challenged you!"
+                                                },
+                                                color = Color.Gray,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+
+                                            when (message.status) {
+
+                                                "PENDING" -> {
+                                                    if (!mine) {
+                                                        Row(
+                                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                        ) {
+                                                            Button(
+                                                                enabled = !sendingInvite,
+                                                                modifier = Modifier.weight(1f),
+                                                                colors = ButtonDefaults.buttonColors(
+                                                                    containerColor = chatPurple
+                                                                ),
+                                                                onClick = {
+                                                                    acceptVsInvite(message)
+                                                                }
+                                                            ) {
+                                                                Text("Accept")
+                                                            }
+
+                                                            OutlinedButton(
+                                                                enabled = !sendingInvite,
+                                                                modifier = Modifier.weight(1f),
+                                                                onClick = {
+                                                                    declineVsInvite(message)
+                                                                }
+                                                            ) {
+                                                                Text("Decline")
+                                                            }
+                                                        }
+                                                    } else {
+                                                        Text(
+                                                            "Waiting for response…",
+                                                            color = Color.Gray
+                                                        )
+                                                    }
+                                                }
+
+                                                "ACCEPTED" -> {
+                                                    Text(
+                                                        "✓ Challenge accepted",
+                                                        color = Color(0xFF2E7D32),
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
+
+                                                "DECLINED" -> {
+                                                    Text(
+                                                        "Challenge declined",
+                                                        color = Color.Gray
+                                                    )
+                                                }
+
+                                                "CANCELLED" -> {
+                                                    Text(
+                                                        "Challenge cancelled",
+                                                        color = Color.Gray
+                                                    )
+                                                }
+
+                                                else -> {
+                                                    Text(
+                                                        "Invitation status unavailable",
+                                                        color = Color.Gray
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                } else {
+
+                                    Surface(
+                                        color = if (mine) chatPurple else Color.White,
+                                        shape = RoundedCornerShape(18.dp),
+                                        modifier = Modifier.widthIn(max = 260.dp)
+                                    ) {
+                                        Text(
+                                            text = message.text,
+                                            color = if (mine) Color.White else Color.DarkGray,
+                                            modifier = Modifier.padding(
+                                                horizontal = 14.dp,
+                                                vertical = 10.dp
+                                            )
                                         )
-                                    )
+                                    }
                                 }
                             }
                         }
@@ -841,6 +1316,7 @@ fun ChatBox(modifier: Modifier = Modifier, friendUsernames: List<String> = empty
                                                     "recipientId" to recipient,
                                                     "participants" to listOf(uid, recipient),
                                                     "text" to text,
+                                                    "type" to "TEXT",
                                                     "createdAt" to FieldValue.serverTimestamp()
                                                 )
                                             )

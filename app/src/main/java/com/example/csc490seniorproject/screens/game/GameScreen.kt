@@ -2,6 +2,10 @@ package com.example.csc490seniorproject.screens
 
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
@@ -43,6 +47,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -56,13 +61,17 @@ import androidx.navigation.NavController
 import com.example.csc490seniorproject.R
 import com.example.csc490seniorproject.objects.Beatmap
 import com.example.csc490seniorproject.objects.BeatNoteType
+import com.example.csc490seniorproject.objects.MultiplayerPlayerStats
 import com.example.csc490seniorproject.viewmodels.GameVM
 import com.example.csc490seniorproject.viewmodels.FallingNote
 import com.example.csc490seniorproject.viewmodels.Judgment
+import com.example.csc490seniorproject.viewmodels.MultiplayerMatchResult
+import com.example.csc490seniorproject.viewmodels.MultiplayerVM
 import com.example.csc490seniorproject.viewmodels.StarRating
 import com.example.csc490seniorproject.viewmodels.WorkspaceViewModel
 import com.example.csc490seniorproject.viewmodels.starsForPercent
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 private val fredoka = FontFamily(Font(R.font.fredoka_medium, FontWeight.Normal))
 private val GameBackground = Color(0xFF221B3F)
@@ -72,13 +81,31 @@ private val FALL_DURATION_MS = GameVM.FALL_DURATION_MS
 
 @SuppressLint("ContextCastToActivity")
 @Composable
-fun GameScreen(viewModel: GameVM, beatmap: Beatmap, navController: NavController, modifier: Modifier = Modifier) {
+fun GameScreen(viewModel: GameVM, beatmap: Beatmap, navController: NavController, modifier: Modifier = Modifier, multiplayerRoomId: String? = null) {
     val workspaceViewModel: WorkspaceViewModel = viewModel(LocalContext.current as ComponentActivity)
 
-    LaunchedEffect(beatmap.id) {
+    val multiplayerViewModel: MultiplayerVM =
+        viewModel(LocalContext.current as ComponentActivity)
+
+    val opponentStats by multiplayerViewModel.opponentStats.collectAsState()
+
+    val matchResult by multiplayerViewModel.matchResult.collectAsState()
+
+    LaunchedEffect(beatmap.id, multiplayerRoomId) {
+
         viewModel.loadBeatmap(beatmap)
 
-        val songLoaded = workspaceViewModel.loadSongById(beatmap.songId)
+        if (multiplayerRoomId != null) {
+            multiplayerViewModel.resetMatchState()
+            multiplayerViewModel.startListening(multiplayerRoomId)
+
+            multiplayerViewModel.currentRoom.first {
+                it?.status == "playing"
+            }
+        }
+
+        val songLoaded =
+            workspaceViewModel.loadSongById(beatmap.songId)
 
         if (songLoaded) {
             workspaceViewModel.prepareSong()
@@ -91,10 +118,14 @@ fun GameScreen(viewModel: GameVM, beatmap: Beatmap, navController: NavController
         }
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(multiplayerRoomId) {
         onDispose {
             viewModel.stop()
             workspaceViewModel.stopSong()
+
+            if (multiplayerRoomId != null) {
+                multiplayerViewModel.stopListening()
+            }
         }
     }
 
@@ -109,7 +140,6 @@ fun GameScreen(viewModel: GameVM, beatmap: Beatmap, navController: NavController
     val activeHoldColumns by viewModel.activeHoldColumns.collectAsState()
     val perfectCount by viewModel.perfectCount.collectAsState()
     val goodCount by viewModel.goodCount.collectAsState()
-    val okCount by viewModel.okCount.collectAsState()
     val missCount by viewModel.missCount.collectAsState()
     val tapHitEffect by viewModel.tapHitEffect.collectAsState()
     val holdReleaseEffect by viewModel.holdReleaseEffect.collectAsState()
@@ -121,17 +151,64 @@ fun GameScreen(viewModel: GameVM, beatmap: Beatmap, navController: NavController
         }
     }
 
+    LaunchedEffect(multiplayerRoomId) {
+
+        val roomId = multiplayerRoomId ?: return@LaunchedEffect
+
+        multiplayerViewModel.currentRoom.first {
+            it?.status == "playing"
+        }
+
+        val username = multiplayerViewModel.getCurrentUsername()
+
+        snapshotFlow {
+            val percentage = if (viewModel.maxPossibleScore > 0) {
+                (score.toDouble() / viewModel.maxPossibleScore) * 100.0
+            } else {
+                0.0
+            }
+
+            MultiplayerPlayerStats(
+                username = username,
+                score = score,
+                percentage = percentage,
+                combo = combo,
+                maxCombo = maxCombo,
+                isOnFire = isOnFire,
+                totalStars = starsForPercent(percentage).starsFilled,
+                perfectCount = perfectCount,
+                goodCount = goodCount,
+                missCount = missCount,
+                finished = isGameOver
+            )
+        }
+            .distinctUntilChanged()
+            .collectLatest { stats ->
+
+                delay(150.milliseconds)
+
+                try {
+                    if (stats.finished) {
+                        multiplayerViewModel.finishMatch(stats)
+                    } else {
+                        multiplayerViewModel.publishStats(stats)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e(
+                        "MultiplayerGame",
+                        "Failed to publish player statistics",
+                        e
+                    )
+                }
+            }
+    }
+
     val colors = laneColors(beatmap.columnCount)
 
     val visibleNotes = remember(elapsedMs, judgedIds) {
         viewModel.fallingNotes.filter { note ->
             val spawnTime = note.hitTimeMs - FALL_DURATION_MS
             if (note.type == BeatNoteType.HOLD) {
-                // Visible for its ENTIRE fall and ENTIRE hold duration,
-                // independent of judged state. Judging a hold happens on
-                // PRESS (to lock in press-timing score) — that does NOT mean
-                // the bar is done; it keeps falling/showing until its tail
-                // actually reaches the release point.
                 elapsedMs >= spawnTime && elapsedMs <= note.releaseTimeMs + 200
             } else {
                 note.id !in judgedIds && elapsedMs >= spawnTime && elapsedMs <= note.hitTimeMs + 200
@@ -141,9 +218,31 @@ fun GameScreen(viewModel: GameVM, beatmap: Beatmap, navController: NavController
 
     Box(modifier = modifier.fillMaxSize().background(GameBackground)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            ScoreHud(score = score, combo = combo, isOnFire = isOnFire)
+            ScoreHud(
+                score = score,
+                maxPossibleScore = viewModel.maxPossibleScore,
+                combo = combo,
+                isOnFire = isOnFire
+            )
+
+            if (multiplayerRoomId != null) {
+                OpponentHud(stats = opponentStats)
+            }
 
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    ComboDisplay(
+                        combo = combo,
+                        isOnFire = isOnFire
+                    )
+                }
+
                 HitButtonsRow(
                     columnCount = beatmap.columnCount,
                     colors = colors,
@@ -166,19 +265,34 @@ fun GameScreen(viewModel: GameVM, beatmap: Beatmap, navController: NavController
         }
 
         if (isGameOver) {
-            GameOverOverlay(
-                score = score,
-                maxPossibleScore = viewModel.maxPossibleScore,
-                maxCombo = maxCombo,
-                perfectCount = perfectCount,
-                goodCount = goodCount,
-                okCount = okCount,
-                missCount = missCount,
-                // Tapping anywhere on the results screen takes you back to
-                // wherever you launched the game from (e.g. the beatmap
-                // editor), the same way a results screen on most games works.
-                onTapToExit = { navController.popBackStack() }
-            )
+
+            if (multiplayerRoomId == null) {
+                GameOverOverlay(
+                    score = score,
+                    maxPossibleScore = viewModel.maxPossibleScore,
+                    maxCombo = maxCombo,
+                    perfectCount = perfectCount,
+                    goodCount = goodCount,
+                    missCount = missCount,
+                    onTapToExit = {
+                        navController.popBackStack()
+                    }
+                )
+
+            } else {
+                if (matchResult == null) {
+                    MultiplayerWaitingOverlay()
+                } else {
+                    MultiplayerResultsOverlay(
+                        result = matchResult!!,
+                        localUserId = com.google.firebase.auth.FirebaseAuth
+                            .getInstance().currentUser?.uid,
+                        onTapToExit = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+            }
         }
     }
 }
@@ -186,6 +300,7 @@ fun GameScreen(viewModel: GameVM, beatmap: Beatmap, navController: NavController
 @Composable
 private fun ScoreHud(
     score: Int,
+    maxPossibleScore: Int,
     combo: Int,
     isOnFire: Boolean
 ) {
@@ -198,6 +313,16 @@ private fun ScoreHud(
         animationSpec = tween(durationMillis = 250)
     )
 
+    // Calculate live percentage.
+    val percentage = if (maxPossibleScore > 0) {
+        (score.toDouble() / maxPossibleScore) * 100.0
+    } else {
+        0.0
+    }
+
+    // Calculate live star rating.
+    val rating = starsForPercent(percentage)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -206,33 +331,152 @@ private fun ScoreHud(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // SCORE (PERCENTAGE)
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "$score",
+                fontFamily = fredoka,
+                fontWeight = FontWeight.Bold,
+                fontSize = 28.sp,
+                color = if (isOnFire) {
+                    Color(0xFFFFC857)
+                } else {
+                    Color.White
+                }
+            )
+
+            Spacer(modifier = Modifier.padding(horizontal = 3.dp))
+
+            Text(
+                text = "(${String.format("%.1f", percentage)}%)",
+                fontFamily = fredoka,
+                fontSize = 16.sp,
+                color = Color.White.copy(alpha = 0.85f)
+            )
+        }
+
+        // TOTAL STARS (5 stars that fill as earned)
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "\u2605".repeat(rating.starsFilled) +
+                        "\u2606".repeat(5 - rating.starsFilled),
+                fontFamily = fredoka,
+                fontSize = 22.sp,
+                color = Color(0xFFFFD700)
+            )
+        }
+    }
+}
+
+@Composable
+private fun OpponentHud(
+    stats: MultiplayerPlayerStats?
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF352850))
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+
         Text(
-            text = "$score",
+            text = stats?.username ?: "Opponent",
             fontFamily = fredoka,
             fontWeight = FontWeight.Bold,
-            fontSize = 28.sp,
-            color = if (isOnFire) {
-                Color(0xFFFFC857)
-            } else {
-                Color.White
-            }
+            fontSize = 14.sp,
+            color = Color(0xFFBFA7FF)
         )
 
-        if (combo > 0) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isOnFire) {
-                    Text(text = "🔥 ", fontSize = 20.sp)
+        if (stats == null) {
+            Text(
+                text = "Waiting for opponent statistics...",
+                fontFamily = fredoka,
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Column {
+                    Text(
+                        text = "SCORE",
+                        fontSize = 10.sp,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+
+                    Text(
+                        text = stats.score.toString(),
+                        fontFamily = fredoka,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp,
+                        color = Color.White
+                    )
                 }
 
+                Column {
+                    Text(
+                        text = "PERCENT",
+                        fontSize = 10.sp,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+
+                    Text(
+                        text = "${String.format("%.1f", stats.percentage)}%",
+                        fontFamily = fredoka,
+                        fontSize = 16.sp,
+                        color = Color.White
+                    )
+                }
+
+                Column {
+                    Text(
+                        text = "COMBO",
+                        fontSize = 10.sp,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+
+                    Text(
+                        text = stats.combo.toString(),
+                        fontFamily = fredoka,
+                        fontSize = 20.sp,
+                        color = if (stats.isOnFire) {
+                            Color(0xFFFFC857)
+                        } else {
+                            Color.White
+                        }
+                    )
+                }
+
+                Column {
+                    Text(
+                        text = "STARS",
+                        fontSize = 10.sp,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+
+                    Text(
+                        text = "\u2605".repeat(stats.totalStars) +
+                                "\u2606".repeat(5 - stats.totalStars),
+                        fontSize = 16.sp,
+                        color = Color(0xFFFFD700)
+                    )
+                }
+            }
+
+            if (stats.isOnFire) {
                 Text(
-                    text = "$combo combo",
+                    text = "🔥 OPPONENT ON FIRE!",
                     fontFamily = fredoka,
-                    fontSize = 16.sp,
-                    color = if (isOnFire) {
-                        Color(0xFFFF9F6B)
-                    } else {
-                        Color.White.copy(alpha = 0.8f)
-                    }
+                    fontSize = 12.sp,
+                    color = Color(0xFFFF9F6B)
                 )
             }
         }
@@ -260,7 +504,6 @@ private fun JudgmentPopup(judgment: Judgment?) {
                 color = when (judgment) {
                     Judgment.PERFECT -> Color(0xFFF4E04D)
                     Judgment.GOOD -> Color(0xFF6BCB77)
-                    Judgment.OK -> Color(0xFF4D96FF)
                     Judgment.MISS -> Color(0xFFFF6B6B)
                     null -> Color.White
                 },
@@ -488,6 +731,63 @@ private fun FallingNotesField(
 private fun radiusForLane(laneWidth: Float): Float =
     laneWidth * 0.3f
 
+@Composable
+private fun ComboDisplay(
+    combo: Int,
+    isOnFire: Boolean
+) {
+    val scale = remember { Animatable(1f) }
+
+    LaunchedEffect(combo) {
+        if (combo > 0) {
+            scale.snapTo(1.25f)
+            scale.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(180)
+            )
+        }
+    }
+
+    AnimatedVisibility(
+        visible = combo > 0,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(top = 28.dp)
+        ) {
+            Text(
+                text = combo.toString(),
+                fontFamily = fredoka,
+                fontWeight = FontWeight.Bold,
+                fontSize = 52.sp,
+                color = if (isOnFire) {
+                    Color(0xFFFFC857)
+                } else {
+                    Color.White
+                },
+                modifier = Modifier.graphicsLayer {
+                    scaleX = scale.value
+                    scaleY = scale.value
+                }
+            )
+
+            Text(
+                text = if (isOnFire) "🔥 COMBO" else "COMBO",
+                fontFamily = fredoka,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                letterSpacing = 4.sp,
+                color = if (isOnFire) {
+                    Color(0xFFFF9F6B)
+                } else {
+                    Color.White.copy(alpha = 0.75f)
+                }
+            )
+        }
+    }
+}
 
 
 @Composable
@@ -547,6 +847,129 @@ private fun HitButtonsRow(
     }
 }
 
+@Composable
+private fun MultiplayerWaitingOverlay() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.85f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "YOU FINISHED!",
+                fontFamily = fredoka,
+                fontWeight = FontWeight.Bold,
+                fontSize = 30.sp,
+                color = Color(0xFFFFD700)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Waiting for your opponent...",
+                fontFamily = fredoka,
+                fontSize = 17.sp,
+                color = Color.White
+            )
+        }
+    }
+}
+
+@Composable
+private fun MultiplayerResultsOverlay(
+    result: MultiplayerMatchResult,
+    localUserId: String?,
+    onTapToExit: () -> Unit
+) {
+    val didWin = result.winnerId == localUserId
+
+    val title = when {
+        result.isDraw -> "IT'S A DRAW!"
+        didWin -> "YOU WON!"
+        else -> "YOU LOST!"
+    }
+
+    val titleColor = when {
+        result.isDraw -> Color(0xFFFFD700)
+        didWin -> Color(0xFF6BCB77)
+        else -> Color(0xFFFF6B6B)
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.85f))
+            .clickable(onClick = onTapToExit),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "VERSUS COMPLETE",
+                fontFamily = fredoka,
+                fontSize = 20.sp,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = title,
+                fontFamily = fredoka,
+                fontWeight = FontWeight.Bold,
+                fontSize = 38.sp,
+                color = titleColor
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "YOU",
+                fontFamily = fredoka,
+                fontSize = 14.sp,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+
+            Text(
+                text = result.localScore.toString(),
+                fontFamily = fredoka,
+                fontWeight = FontWeight.Bold,
+                fontSize = 34.sp,
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "OPPONENT",
+                fontFamily = fredoka,
+                fontSize = 14.sp,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+
+            Text(
+                text = result.opponentScore.toString(),
+                fontFamily = fredoka,
+                fontWeight = FontWeight.Bold,
+                fontSize = 28.sp,
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            Text(
+                text = "Tap anywhere to continue",
+                fontFamily = fredoka,
+                fontSize = 13.sp,
+                color = Color.White.copy(alpha = 0.5f)
+            )
+        }
+    }
+}
 
 @Composable
 private fun GameOverOverlay(
@@ -555,7 +978,6 @@ private fun GameOverOverlay(
     maxCombo: Int,
     perfectCount: Int,
     goodCount: Int,
-    okCount: Int,
     missCount: Int,
     onTapToExit: () -> Unit
 ) {
@@ -605,10 +1027,6 @@ private fun GameOverOverlay(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(text = "Good Notes: $goodCount", fontFamily = fredoka, fontSize = 16.sp, color = Color(0xFF6BCB77))
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(text = "OK Notes: $okCount", fontFamily = fredoka, fontSize = 16.sp, color = Color(0xFF4D96FF))
 
             Spacer(modifier = Modifier.height(4.dp))
 

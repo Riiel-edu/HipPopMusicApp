@@ -26,7 +26,6 @@ import kotlin.math.abs
 enum class Judgment(val points: Int, val label: String) {
     PERFECT(50, "Perfect!"),
     GOOD(30, "Good"),
-    OK(10, "OK"),
     MISS(0, "Miss")
 }
 
@@ -99,9 +98,6 @@ class GameVM(application: Application) : AndroidViewModel(application) {
 
     private val _goodCount = MutableStateFlow(0)
     val goodCount: StateFlow<Int> = _goodCount.asStateFlow()
-
-    private val _okCount = MutableStateFlow(0)
-    val okCount: StateFlow<Int> = _okCount.asStateFlow()
 
     private val _missCount = MutableStateFlow(0)
     val missCount: StateFlow<Int> = _missCount.asStateFlow()
@@ -191,7 +187,6 @@ class GameVM(application: Application) : AndroidViewModel(application) {
         _lastJudgment.value = null
         _perfectCount.value = 0
         _goodCount.value = 0
-        _okCount.value = 0
         _missCount.value = 0
         _activeHolds.value = emptyMap()
         _activeHoldColumns.value = emptySet()
@@ -281,7 +276,7 @@ class GameVM(application: Application) : AndroidViewModel(application) {
 
         val newlyMissed = fallingNotes.filter { note ->
             note.id !in judged &&
-                    nowMs > note.hitTimeMs + OK_WINDOW_MS
+                    nowMs > note.hitTimeMs + HIT_WINDOW_MS
         }
 
         if (newlyMissed.isEmpty()) return
@@ -306,7 +301,7 @@ class GameVM(application: Application) : AndroidViewModel(application) {
 
         val candidate = fallingNotes
             .filter { it.column == column && it.id !in judged }
-            .filter { abs(now - it.hitTimeMs) <= OK_WINDOW_MS }
+            .filter { abs(now - it.hitTimeMs) <= HIT_WINDOW_MS }
             .minByOrNull { abs(now - it.hitTimeMs) }
             ?: return
 
@@ -317,7 +312,7 @@ class GameVM(application: Application) : AndroidViewModel(application) {
         val judgment = when {
             offset <= PERFECT_WINDOW_MS -> Judgment.PERFECT
             offset <= GOOD_WINDOW_MS -> Judgment.GOOD
-            else -> Judgment.OK
+            else -> Judgment.MISS
         }
 
         val multiplier = registerHit(judgment)
@@ -368,10 +363,15 @@ class GameVM(application: Application) : AndroidViewModel(application) {
     }
 
     private fun registerHit(judgment: Judgment): Double {
+
+        if (judgment == Judgment.MISS) {
+            registerMiss()
+            return 1.0
+        }
+
         when (judgment) {
             Judgment.PERFECT -> _perfectCount.value++
             Judgment.GOOD -> _goodCount.value++
-            Judgment.OK -> _okCount.value++
             Judgment.MISS -> Unit
         }
 
@@ -443,7 +443,8 @@ class GameVM(application: Application) : AndroidViewModel(application) {
 
         const val PERFECT_WINDOW_MS = 50.0
         const val GOOD_WINDOW_MS = 120.0
-        const val OK_WINDOW_MS = 200.0
+
+        const val HIT_WINDOW_MS = 120.0
 
         const val ON_FIRE_COMBO_THRESHOLD = 10
         const val ON_FIRE_MULTIPLIER = 1.5

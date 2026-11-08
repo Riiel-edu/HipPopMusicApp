@@ -1,6 +1,8 @@
 package com.example.csc490seniorproject
 
 import android.os.Bundle
+import androidx.activity.SystemBarStyle
+import android.graphics.Color
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -52,7 +54,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        )
 
         setContent {
             CSC490SeniorProjectTheme {

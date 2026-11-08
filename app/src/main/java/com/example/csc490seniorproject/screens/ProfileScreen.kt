@@ -967,7 +967,7 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                 ProfileTab.CHATS -> {
                     item {
                         ChatBox(
-                            friendUsernames = friendsList.map { it.username }
+                            modifier = Modifier.fillMaxWidth(), friendUsernames = friendsList.map { it.username }, navController
                         )
                     }
                 }
