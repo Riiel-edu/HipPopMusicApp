@@ -720,14 +720,16 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                         onClick = { selectedTab = ProfileTab.FRIENDS }
                     )
 
-                    ProfileTabCard(
-                        label = "Messages",
-                        imageRes = R.drawable.chat,
-                        selected = selectedTab == ProfileTab.CHATS,
-                        font = fredoka,
-                        modifier = Modifier.weight(1f),
-                        onClick = { selectedTab = ProfileTab.CHATS }
-                    )
+                    if (currentUid != null && currentUid == profileUid) {
+                        ProfileTabCard(
+                            label = "Messages",
+                            imageRes = R.drawable.chat,
+                            selected = selectedTab == ProfileTab.CHATS,
+                            font = fredoka,
+                            modifier = Modifier.weight(1f),
+                            onClick = { selectedTab = ProfileTab.CHATS }
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -965,10 +967,14 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                 }
 
                 ProfileTab.CHATS -> {
-                    item {
-                        ChatBox(
-                            modifier = Modifier.fillMaxWidth(), friendUsernames = friendsList.map { it.username }, navController
-                        )
+                    if (currentUid != null && currentUid == profileUid) {
+                        item {
+                            ChatBox(
+                                modifier = Modifier.fillMaxWidth(),
+                                friendUsernames = friendsList.map { it.username },
+                                navController = navController
+                            )
+                        }
                     }
                 }
             }
