@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -95,6 +96,10 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
     }
     var profilePictureUri by remember(username) {
         mutableStateOf<Uri?>(null)
+    }
+
+    var showBlockDialog by remember(username) {
+        mutableStateOf(false)
     }
 
     val availableMusicTags = listOf(
@@ -312,6 +317,42 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
         }
     }
 
+    if (showBlockDialog) {
+        AlertDialog(
+            onDismissRequest = { showBlockDialog = false },
+            title = { Text("Block $editableUsername?") },
+            text = {
+                Text(
+                    "They'll be removed as a friend and won't be able to see " +
+                            "your profile, message you, or find you in search " +
+                            "-- and you won't see theirs either. You can unblock " +
+                            "them later from Settings."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val myUid = currentUid
+                        val targetUid = profileUid
+
+                        if (myUid != null && targetUid != null) {
+                            viewModel.blockUser(myUid, targetUid, editableUsername)
+                        }
+
+                        showBlockDialog = false
+                    }
+                ) {
+                    Text("Block", color = Color(0xFFB3261E))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBlockDialog = false }) {
+                    Text("Cancel", color = ProfilePurple)
+                }
+            }
+        )
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -325,6 +366,34 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
             )
 
             Spacer(Modifier.height(8.dp))
+
+            if (viewModel.profileBlocked) {
+                Text(
+                    text = "Profile unavailable",
+                    fontFamily = fredoka,
+                    fontSize = 24.sp
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    shadowElevation = 4.dp,
+                    border = BorderStroke(2.dp, ProfilePurple),
+                    color = Color.White,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "This profile can't be shown.",
+                        fontFamily = fredoka,
+                        fontSize = 13.sp,
+                        color = Color(0xFF444444),
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+
+                return@item
+            }
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -647,6 +716,18 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                                         Text("✓ Friends", fontFamily = fredoka)
                                     }
                                 }
+                            }
+
+                            Spacer(Modifier.height(4.dp))
+
+                            TextButton(
+                                onClick = { showBlockDialog = true }
+                            ) {
+                                Text(
+                                    "Block user",
+                                    fontFamily = fredoka,
+                                    color = Color(0xFFB3261E)
+                                )
                             }
                         }
                     }

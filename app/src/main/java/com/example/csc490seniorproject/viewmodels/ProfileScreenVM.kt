@@ -29,6 +29,16 @@ class ProfileScreenVM(application: Application) : AndroidViewModel(application) 
     var profileUsername by mutableStateOf("")
     var aboutMe by mutableStateOf("")
     var profilePictureUrl by mutableStateOf("")
+
+    // True once we know the loaded profile and the current account have
+    // blocked each other, in either direction. Tracked separately from
+    // profileLocked (privacy) so the UI can show a distinct message and
+    // skip rendering anything about the other account at all.
+    var profileBlocked by mutableStateOf(false)
+    var isBlockedByMe by mutableStateOf(false)
+    var hasBlockedMe by mutableStateOf(false)
+    val blockedUsersList = mutableStateListOf<User>()
+
     private val db = FirebaseFirestore.getInstance()
 
     // The profile's immutable login username (the usernames/{key} doc id) --
@@ -135,28 +145,81 @@ class ProfileScreenVM(application: Application) : AndroidViewModel(application) 
     fun loadProfile(username: String, currentUid: String?) {
         accountUsername = username
         profileLocked = null
+        profileBlocked = false
+        isBlockedByMe = false
+        hasBlockedMe = false
 
         resolveUid(username) { uid ->
             profileUid = uid
 
-            checkProfileLock(username, currentUid, uid) { locked, private ->
-                profileLocked = locked
-                isPrivate = private
+            fun proceed() {
+                checkProfileLock(username, currentUid, uid) { locked, private ->
+                    profileLocked = locked
+                    isPrivate = private
 
-                if (!locked) {
-                    getSongs(uid)
-                    getFriends(uid)
-                } else {
+                    if (!locked) {
+                        getSongs(uid)
+                        getFriends(uid)
+                    } else {
+                        songsList.clear()
+                        friendsList.clear()
+                    }
+
+                    if (currentUid != null) {
+                        if (currentUid == uid) getIncomingRequests(currentUid)
+                        else checkFriendStatus(currentUid, uid)
+                    }
+                }
+            }
+
+            if (currentUid == null || currentUid == uid) {
+                proceed()
+                return@resolveUid
+            }
+
+            checkBlockStatus(currentUid, uid) { blockedByMe, blockedMe ->
+                isBlockedByMe = blockedByMe
+                hasBlockedMe = blockedMe
+
+                if (blockedByMe || blockedMe) {
+                    profileBlocked = true
+                    profileLocked = true
                     songsList.clear()
                     friendsList.clear()
-                }
-
-                if (currentUid != null) {
-                    if (currentUid == uid) getIncomingRequests(currentUid)
-                    else checkFriendStatus(currentUid, uid)
+                    friendStatus = FriendStatus.NONE
+                } else {
+                    proceed()
                 }
             }
         }
+    }
+
+    // Checks both directions of the blockedUsers subcollection so the
+    // caller can tell "I blocked them" apart from "they blocked me" --
+    // both hide the profile/chat/search the same way, but only the first
+    // lets this account unblock from Settings.
+    fun checkBlockStatus(
+        myUid: String,
+        otherUid: String,
+        onResult: (blockedByMe: Boolean, blockedMe: Boolean) -> Unit
+    ) {
+        db.collection("users").document(myUid)
+            .collection("blockedUsers").document(otherUid).get()
+            .addOnSuccessListener { mineDoc ->
+                val blockedByMe = mineDoc.exists()
+
+                db.collection("users").document(otherUid)
+                    .collection("blockedUsers").document(myUid).get()
+                    .addOnSuccessListener { theirDoc ->
+                        onResult(blockedByMe, theirDoc.exists())
+                    }
+                    .addOnFailureListener {
+                        onResult(blockedByMe, false)
+                    }
+            }
+            .addOnFailureListener {
+                onResult(false, false)
+            }
     }
 
     fun getSongs(uid: String) {
@@ -431,6 +494,86 @@ class ProfileScreenVM(application: Application) : AndroidViewModel(application) 
             }
             .addOnFailureListener { e ->
                 println("FIREBASE: Failed to update privacy: ${e.message}")
+            }
+    }
+
+    // Blocking removes the friendship (both docs) and any pending request
+    // (either direction) in the same batch as recording the block, so a
+    // blocked account can't keep messaging or re-request immediately after.
+    // blockedUsername is denormalized onto the block doc itself because the
+    // blocker usually can't read the blocked account's gated users/{uid}
+    // doc anymore once there's no friendship -- Settings needs a name
+    // without that read.
+    fun blockUser(myUid: String, targetUid: String, targetUsername: String, onDone: () -> Unit = {}) {
+        val batch = db.batch()
+
+        batch.set(
+            db.collection("users").document(myUid)
+                .collection("blockedUsers").document(targetUid),
+            mapOf(
+                "createdAt" to FieldValue.serverTimestamp(),
+                "blockedUsername" to targetUsername.ifBlank { "Unknown user" }
+            )
+        )
+
+        batch.delete(db.collection("users").document(myUid).collection("friends").document(targetUid))
+        batch.delete(db.collection("users").document(targetUid).collection("friends").document(myUid))
+        batch.delete(db.collection("users").document(targetUid).collection("friendRequests").document(myUid))
+        batch.delete(db.collection("users").document(myUid).collection("friendRequests").document(targetUid))
+
+        batch.commit()
+            .addOnSuccessListener {
+                isBlockedByMe = true
+                profileBlocked = true
+                profileLocked = true
+                friendStatus = FriendStatus.NONE
+                friendsList.removeAll { it.uid == targetUid }
+                incomingRequests.removeAll { it.uid == targetUid }
+                songsList.clear()
+                onDone()
+            }
+            .addOnFailureListener { e ->
+                println("FIREBASE: blockUser failed: $e")
+            }
+    }
+
+    fun unblockUser(myUid: String, targetUid: String, onDone: () -> Unit = {}) {
+        db.collection("users").document(myUid)
+            .collection("blockedUsers").document(targetUid)
+            .delete()
+            .addOnSuccessListener {
+                isBlockedByMe = false
+                blockedUsersList.removeAll { it.uid == targetUid }
+                onDone()
+            }
+            .addOnFailureListener { e ->
+                println("FIREBASE: unblockUser failed: $e")
+            }
+    }
+
+    fun loadBlockedUsers(myUid: String) {
+        db.collection("users").document(myUid).collection("blockedUsers").get()
+            .addOnSuccessListener { snapshot ->
+                blockedUsersList.clear()
+
+                for (doc in snapshot.documents) {
+                    blockedUsersList.add(
+                        User(
+                            uid = doc.id,
+                            username = doc.getString("blockedUsername") ?: "Unknown user",
+                            first_name = "",
+                            last_name = "",
+                            privacy = false,
+                            DoB = "",
+                            email = "",
+                            songs = arrayListOf(),
+                            friends = arrayListOf()
+                        )
+                    )
+                }
+            }
+            .addOnFailureListener { e ->
+                println("FIREBASE: loadBlockedUsers failed: $e")
             }
     }
 }

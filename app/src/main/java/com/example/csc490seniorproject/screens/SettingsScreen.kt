@@ -37,6 +37,7 @@ import com.example.csc490seniorproject.viewmodels.LandingScreenVM
 fun SettingsScreen(viewModel: LandingScreenVM,
                     modifier: Modifier = Modifier,
                     onProfileClick: () -> Unit = {},
+                    onBlockedUsersClick: () -> Unit = {},
                     onLogoutClick: () -> Unit) {
 
     var musicOn by rememberSaveable { mutableStateOf(true) }
@@ -134,6 +135,26 @@ fun SettingsScreen(viewModel: LandingScreenVM,
                 )
                 Text(
                     text = "Your songs and account information",
+                    fontSize = 12.sp,
+                    color = Color.DarkGray
+                )
+            }
+
+            HorizontalDivider()
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onBlockedUsersClick)
+                    .padding(vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Blocked users ›",
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "Manage accounts you've blocked",
                     fontSize = 12.sp,
                     color = Color.DarkGray
                 )

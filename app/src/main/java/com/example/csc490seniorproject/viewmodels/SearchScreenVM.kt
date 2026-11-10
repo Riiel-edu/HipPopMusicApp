@@ -34,6 +34,13 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
     private var ownSongsListener: ListenerRegistration? = null
     private var sharedSongsListener: ListenerRegistration? = null
 
+    // Uids this account has blocked, used to keep them out of search
+    // results. The reverse direction (did this candidate block me) is
+    // checked per-result in searchUsers, same as refreshFriendStatus does
+    // for friend state.
+    private val blockedByMe = mutableSetOf<String>()
+    private var blockedUsersListener: ListenerRegistration? = null
+
     private val publicSongs = mutableMapOf<String, Song>()
     private val ownSongs = mutableMapOf<String, Song>()
     private val sharedSongs = mutableMapOf<String, Song>()
@@ -48,9 +55,11 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
         publicSongsListener?.remove()
         ownSongsListener?.remove()
         sharedSongsListener?.remove()
+        blockedUsersListener?.remove()
         publicSongsListener = null
         ownSongsListener = null
         sharedSongsListener = null
+        blockedUsersListener = null
 
         publicSongs.clear()
         ownSongs.clear()
@@ -58,6 +67,7 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
         songsList.clear()
         userResults.clear()
         friendStatuses.clear()
+        blockedByMe.clear()
         songsError = null
         searchGeneration++
 
@@ -66,6 +76,16 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
             songsError = "Please log in to see songs."
             return@AuthStateListener
         }
+
+        blockedUsersListener = db.collection("users").document(uid)
+            .collection("blockedUsers")
+            .addSnapshotListener { snapshot, error ->
+                if (generation != songsGeneration) return@addSnapshotListener
+                if (error == null) {
+                    blockedByMe.clear()
+                    blockedByMe.addAll(snapshot?.documents.orEmpty().map { it.id })
+                }
+            }
 
         fun mergeAndPublish() {
             if (generation != songsGeneration) return
@@ -145,21 +165,39 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
                 for (doc in snapshot.documents) {
                     val uid = doc.getString("uid") ?: continue
                     if (uid == myUid || userResults.any { it.uid == uid }) continue
+                    if (uid in blockedByMe) continue
 
-                    userResults.add(
-                        User(
-                            uid = uid,
-                            username = doc.getString("username") ?: doc.id,
-                            first_name = "",
-                            last_name = "",
-                            privacy = doc.getBoolean("privacy") ?: false,
-                            DoB = "",
-                            email = doc.getString("email") ?: "",
-                            songs = arrayListOf(),
-                            friends = arrayListOf()
-                        )
-                    )
-                    refreshFriendStatus(myUid, uid, thisGeneration)
+                    val username = doc.getString("username") ?: doc.id
+                    val privacy = doc.getBoolean("privacy") ?: false
+                    val email = doc.getString("email") ?: ""
+
+                    // Reverse direction: did this candidate block ME? Only
+                    // added to results once we know they haven't -- fails
+                    // closed (stays out of results) on a read error rather
+                    // than risk a blocked account resurfacing in search.
+                    db.collection("users").document(uid)
+                        .collection("blockedUsers").document(myUid)
+                        .get()
+                        .addOnSuccessListener blockCheck@{ blockDoc ->
+                            if (thisGeneration != searchGeneration) return@blockCheck
+                            if (blockDoc.exists()) return@blockCheck
+                            if (userResults.any { it.uid == uid }) return@blockCheck
+
+                            userResults.add(
+                                User(
+                                    uid = uid,
+                                    username = username,
+                                    first_name = "",
+                                    last_name = "",
+                                    privacy = privacy,
+                                    DoB = "",
+                                    email = email,
+                                    songs = arrayListOf(),
+                                    friends = arrayListOf()
+                                )
+                            )
+                            refreshFriendStatus(myUid, uid, thisGeneration)
+                        }
                 }
             }
             .addOnFailureListener { error ->
@@ -251,6 +289,7 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
         publicSongsListener?.remove()
         ownSongsListener?.remove()
         sharedSongsListener?.remove()
+        blockedUsersListener?.remove()
         super.onCleared()
     }
 }

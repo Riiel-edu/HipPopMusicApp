@@ -96,6 +96,12 @@ fun ChatBox(modifier: Modifier, friendUsernames: List<String> = emptyList(), nav
         val deletedThrough = remember {
             mutableStateMapOf<String, Long>()
         }
+        val blockedByMe = remember {
+            mutableStateListOf<String>()
+        }
+        val blockedMeMap = remember {
+            mutableStateMapOf<String, Boolean>()
+        }
 
         var selectedUid by rememberSaveable {
             mutableStateOf<String?>(null)
@@ -583,6 +589,27 @@ fun ChatBox(modifier: Modifier, friendUsernames: List<String> = emptyList(), nav
             }
         }
 
+        // Track which peers this account has blocked.
+        DisposableEffect(uid) {
+            var active = true
+
+            val registration = db.collection("users")
+                .document(uid)
+                .collection("blockedUsers")
+                .addSnapshotListener { snapshot, exception ->
+                    if (active && exception == null) {
+                        val ids = snapshot?.documents.orEmpty().map { it.id }
+                        blockedByMe.clear()
+                        blockedByMe.addAll(ids)
+                    }
+                }
+
+            onDispose {
+                active = false
+                registration.remove()
+            }
+        }
+
         // Resolve usernames supplied by ProfileScreen.
         val names = friendUsernames.distinct().sorted()
 
@@ -623,7 +650,50 @@ fun ChatBox(modifier: Modifier, friendUsernames: List<String> = emptyList(), nav
             }
         }
 
-        // Hide messages sent before this account deleted the chat.
+        val blockCandidateIds = (
+            messages.map {
+                if (it.senderId == uid) it.recipientId else it.senderId
+            } + friendIds
+        ).filter { it.isNotBlank() && it != uid }.distinct()
+
+        // Reverse-direction block check: does this peer have ME blocked?
+        // Cached per peer id since it never needs re-checking once known,
+        // and a block only ever goes from "not found" to "found" (blocking
+        // again doesn't change it, and unblocking is handled by the
+        // listener above for the other direction).
+        DisposableEffect(uid, blockCandidateIds) {
+            var active = true
+
+            blockCandidateIds.filter { it !in blockedMeMap }.forEach { peerId ->
+                db.collection("users")
+                    .document(peerId)
+                    .collection("blockedUsers")
+                    .document(uid)
+                    .get()
+                    .addOnSuccessListener { doc ->
+                        if (active) {
+                            blockedMeMap[peerId] = doc.exists()
+                        }
+                    }
+                    .addOnFailureListener {
+                        if (active) {
+                            blockedMeMap[peerId] = false
+                        }
+                    }
+            }
+
+            onDispose {
+                active = false
+            }
+        }
+
+        fun isBlocked(peerId: String): Boolean {
+            return peerId in blockedByMe || blockedMeMap[peerId] == true
+        }
+
+        // Hide messages sent before this account deleted the chat, and any
+        // conversation with a peer who has blocked this account or been
+        // blocked by it.
         val visibleMessages: List<MessengerMessage> =
             if (!deletionsLoaded) {
                 emptyList()
@@ -633,6 +703,10 @@ fun ChatBox(modifier: Modifier, friendUsernames: List<String> = emptyList(), nav
                         message.recipientId
                     } else {
                         message.senderId
+                    }
+
+                    if (isBlocked(peerId)) {
+                        return@filter false
                     }
 
                     val cutoff = deletedThrough[peerId]
@@ -800,7 +874,7 @@ fun ChatBox(modifier: Modifier, friendUsernames: List<String> = emptyList(), nav
             color = Color(0xFFF7F4FF)
         ) {
             Column(Modifier.padding(14.dp)) {
-                if (selectedUid == null) {
+                if (selectedUid == null || selectedUid?.let { isBlocked(it) } == true) {
                     OutlinedTextField(
                         value = search,
                         onValueChange = {
@@ -845,6 +919,7 @@ fun ChatBox(modifier: Modifier, friendUsernames: List<String> = emptyList(), nav
 
                     val friendPickerIds = friendIds
                         .filter { it !in conversations.keys }
+                        .filter { !isBlocked(it) }
                         .filter { peerId ->
                             search.isBlank() ||
                                     people[peerId]?.username?.contains(search.trim(), ignoreCase = true) == true

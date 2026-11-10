@@ -25,6 +25,7 @@ import androidx.navigation.navArgument
 import com.example.csc490seniorproject.data.SongRepository
 import com.example.csc490seniorproject.objects.Beatmap
 import com.example.csc490seniorproject.screens.BeatmapEditorScreen
+import com.example.csc490seniorproject.screens.BlockedUsersScreen
 import com.example.csc490seniorproject.screens.EditorScreen
 import com.example.csc490seniorproject.screens.GameScreen
 import com.example.csc490seniorproject.screens.LandingScreen
@@ -177,6 +178,9 @@ fun Nav(
                 onProfileClick = {
                     navController.navigate("ProfileScreen")
                 },
+                onBlockedUsersClick = {
+                    navController.navigate("BlockedUsersScreen")
+                },
                 onLogoutClick = {
                     FirebaseAuth.getInstance().signOut()
                     currentUsername = "Username"
@@ -189,6 +193,10 @@ fun Nav(
                     }
                 }
             )
+        }
+
+        composable(route = "BlockedUsersScreen") {
+            BlockedUsersScreen(navController = navController)
         }
 
         composable(
