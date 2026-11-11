@@ -40,6 +40,7 @@ import com.example.csc490seniorproject.data.UserSession
 import com.example.csc490seniorproject.data.getUserProfile
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
+import androidx.compose.material3.MaterialTheme
 
 @Composable
 fun LoginScreen( onLoginSuccess: (String) -> Unit, onRegisterClick: () -> Unit) {
@@ -53,8 +54,8 @@ fun LoginScreen( onLoginSuccess: (String) -> Unit, onRegisterClick: () -> Unit) 
     var passwordVisible by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
-    val purple = Color(0xFF6737F5)
-    val lightPurple = Color(0xFFE9E2FF)
+    val purple = MaterialTheme.colorScheme.primary
+    val lightPurple = MaterialTheme.colorScheme.background
 
     Column(
         modifier = Modifier
@@ -76,12 +77,13 @@ fun LoginScreen( onLoginSuccess: (String) -> Unit, onRegisterClick: () -> Unit) 
         Text(
             text = "Welcome back!",
             fontSize = 25.sp,
+            color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.SemiBold
         )
 
         Text(
             text = "Log in to continue discovering music.",
-            color = Color.DarkGray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 15.sp
         )
 
@@ -144,7 +146,7 @@ fun LoginScreen( onLoginSuccess: (String) -> Unit, onRegisterClick: () -> Unit) 
 
             Text(
                 text = errorMessage,
-                color = Color.Red,
+                color = MaterialTheme.colorScheme.error,
                 fontSize = 14.sp
             )
         }
@@ -194,7 +196,7 @@ fun LoginScreen( onLoginSuccess: (String) -> Unit, onRegisterClick: () -> Unit) 
                 }
             },
             modifier = Modifier.fillMaxWidth().height(54.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = purple),
+            colors = ButtonDefaults.buttonColors(containerColor = purple, contentColor = MaterialTheme.colorScheme.onPrimary),
             shape = RoundedCornerShape(14.dp)
         ) {
             Text(

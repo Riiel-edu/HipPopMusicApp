@@ -18,7 +18,7 @@ import android.net.Uri
 import com.google.firebase.storage.FirebaseStorage
 enum class FriendStatus { NONE, REQUEST_SENT, REQUEST_RECEIVED, FRIENDS }
 
-class ProfileScreenVM(application: Application) : AndroidViewModel(application) {
+ class ProfileScreenVM(application: Application) : AndroidViewModel(application) {
     val songsList = mutableStateListOf<Song>()
     val friendsList = mutableStateListOf<User>()
     var messageList = mutableStateListOf<String>()
@@ -478,22 +478,39 @@ class ProfileScreenVM(application: Application) : AndroidViewModel(application) 
     // Flips the account's privacy flag on both the gated users/{uid} doc and
     // its public usernames/{username} mirror, so search and login can still
     // see the privacy flag without ever reading the gated doc.
-    fun setPrivacy(myUid: String, username: String, private: Boolean) {
+    fun setPrivacy(
+        myUid: String,
+        username: String,
+        private: Boolean,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        if (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid != myUid) {
+            onError("Please sign in again.")
+            return
+        }
+
         val usernameKey = username.lowercase()
 
-        db.collection("users").document(myUid)
-            .update("privacy", private)
-            .addOnSuccessListener {
-                isPrivate = private
+        if (usernameKey.isBlank()) {
+            onError("Unable to find your account username.")
+            return
+        }
 
-                db.collection("usernames").document(usernameKey)
-                    .update("privacy", private)
-                    .addOnFailureListener { e ->
-                        println("FIREBASE: Failed to update usernames privacy mirror: ${e.message}")
-                    }
+        // Save both records together so they stay consistent.
+        val batch = db.batch()
+
+        batch.update(db.collection("users").document(myUid), "privacy", private)
+
+        batch.update(db.collection("usernames").document(usernameKey), "privacy", private)
+
+        batch.commit().addOnSuccessListener {
+                isPrivate = private
+                onSuccess()
             }
-            .addOnFailureListener { e ->
-                println("FIREBASE: Failed to update privacy: ${e.message}")
+            .addOnFailureListener {
+                onError(it.localizedMessage ?: "Unable to update account privacy."
+                )
             }
     }
 

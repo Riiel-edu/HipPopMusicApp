@@ -1,5 +1,6 @@
 package com.example.csc490seniorproject.screens
 
+import android.R.attr.thickness
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -360,12 +361,6 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item{
-            HorizontalDivider(
-                color = Color.White,
-                thickness = 2.dp
-            )
-
-            Spacer(Modifier.height(8.dp))
 
             if (viewModel.profileBlocked) {
                 Text(

@@ -30,6 +30,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,8 +61,9 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
 
     val fredoka = FontFamily(Font(R.font.fredoka_medium, FontWeight.Normal))
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFFFFFFF))) {
-
+    Box(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -81,7 +83,7 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                 modifier = Modifier.fillMaxWidth().padding(20.dp),
                 shape = RoundedCornerShape(10.dp),
                 shadowElevation = 30.dp,
-                color = Color(0xFFbfb1fa)
+                color = Color(0xFFBFB1FA)
             ) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     Text(
@@ -148,7 +150,7 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                 color = Color(0xFFbfb1fa),
                 modifier = Modifier.fillMaxWidth().padding(20.dp),
                 shape = RoundedCornerShape(10.dp),
-                shadowElevation = 30.dp
+                shadowElevation = 2.dp
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -284,7 +286,7 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                 color = Color(0xFFbfb1fa),
                 modifier = Modifier.fillMaxWidth().padding(20.dp),
                 shape = RoundedCornerShape(10.dp),
-                shadowElevation = 30.dp
+                shadowElevation = 2.dp
             ) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     Text(
