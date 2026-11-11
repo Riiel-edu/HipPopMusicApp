@@ -11,7 +11,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
@@ -32,7 +31,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
+import androidx.compose.material3.MaterialTheme
 @Composable
 fun ChatBox(modifier: Modifier, navController: NavController) {
     val db = remember { FirebaseFirestore.getInstance() }
@@ -866,7 +865,8 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
         Surface(
             modifier = modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            color = Color(0xFFF7F4FF)
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
         ) {
             Column(Modifier.padding(14.dp)) {
                 if (selectedUid == null || selectedUid?.let { isBlocked(it) } == true) {
@@ -938,7 +938,8 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
                                 conversations[peerId]?.lastOrNull()
 
                             Surface(
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.surface,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
                                 shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -951,7 +952,8 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
                                             person?.let { openPerson(it) }
                                         },
                                         enabled = person != null && !deleting,
-                                        color = Color.White,
+                                        color = MaterialTheme.colorScheme.surface,
+                                        contentColor = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Row(
@@ -1082,7 +1084,8 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
                                         person?.let { openPerson(it) }
                                     },
                                     enabled = person != null && !deleting,
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.surface,
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
                                     shape = RoundedCornerShape(16.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
@@ -1222,7 +1225,8 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
                                 if (isVsInvite) {
 
                                     Surface(
-                                        color = Color.White,
+                                        color = MaterialTheme.colorScheme.surface,
+                                        contentColor = MaterialTheme.colorScheme.onSurface,
                                         shape = RoundedCornerShape(18.dp),
                                         modifier = Modifier.widthIn(max = 280.dp)
                                     ) {

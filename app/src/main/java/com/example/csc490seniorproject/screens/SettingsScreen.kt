@@ -33,12 +33,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.csc490seniorproject.viewmodels.LandingScreenVM
+import android.app.Application
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.csc490seniorproject.viewmodels.ProfileScreenVM
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import androidx.compose.material3.MaterialTheme
+import com.example.csc490seniorproject.ui.theme.rememberAppearance
+import com.example.csc490seniorproject.ui.theme.saveAppearance
+
+
 @Composable
-fun SettingsScreen(viewModel: LandingScreenVM,
-                    modifier: Modifier = Modifier,
-                    onProfileClick: () -> Unit = {},
-                    onBlockedUsersClick: () -> Unit = {},
-                    onLogoutClick: () -> Unit) {
+fun SettingsScreen(
+    viewModel: LandingScreenVM,
+    modifier: Modifier = Modifier,
+    onProfileClick: () -> Unit = {},
+    onBlockedUsersClick: () -> Unit = {},
+    onLogoutClick: () -> Unit
+) {
 
     var musicOn by rememberSaveable { mutableStateOf(true) }
     var soundEffectsOn by rememberSaveable { mutableStateOf(true) }
@@ -52,140 +67,149 @@ fun SettingsScreen(viewModel: LandingScreenVM,
     var openDialog by remember { mutableStateOf<String?>(null) }
     var showAbout by remember { mutableStateOf(false) }
 
-    val Purple = Color(0xFF683CF5)
-    val CardPurple = Color(0xFFE0D2FF)
-    val LogoutRed = Color(0xFF683CF5)
+    val context = LocalContext.current
+    val appearance = rememberAppearance()
 
+    val Purple = MaterialTheme.colorScheme.primary
+    val CardPurple = MaterialTheme.colorScheme.surfaceVariant
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
     ) {
-        Text(
-            text = "Settings ⚙",
-            color = Purple,
-            fontSize = 27.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text("Make HipPop your own", color = Color.DarkGray)
-
-        SettingsCard("Audio", CardPurple, Purple) {
-            SettingsSwitch(
-                title = "Music",
-                description = "Play music while using the app",
-                checked = musicOn,
-                onCheckedChange = { musicOn = it }
-            )
-            HorizontalDivider()
-
-            SettingsSwitch(
-                title = "Sound effects",
-                description = "Play sounds when you interact with the app",
-                checked = soundEffectsOn,
-                onCheckedChange = { soundEffectsOn = it }
-            )
-            HorizontalDivider()
-
-            SettingsChoice("Audio quality", audioQuality) {
-                openDialog = "Audio quality"
-            }
-            HorizontalDivider()
-
-            SettingsChoice("Equalizer", equalizer) {
-                openDialog = "Equalizer"
-            }
-            HorizontalDivider()
-
-            SettingsSwitch(
-                title = "Sound Check",
-                description = "Keep songs at a more consistent volume",
-                checked = soundCheckOn,
-                onCheckedChange = { soundCheckOn = it }
-            )
-            HorizontalDivider()
-
-            SettingsChoice("Song transitions", transitions) {
-                openDialog = "Song transitions"
-            }
-        }
-
-        SettingsCard("Downloads", CardPurple, Purple) {
-            SettingsSwitch(
-                title = "Download over mobile data",
-                description = "Allow downloads without Wi-Fi",
-                checked = mobileDownloadsOn,
-                onCheckedChange = { mobileDownloadsOn = it }
-            )
-        }
-
-        SettingsCard("Account", CardPurple, Purple) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onProfileClick)
-                    .padding(vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "Profile ›",
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "Your songs and account information",
-                    fontSize = 12.sp,
-                    color = Color.DarkGray
-                )
-            }
-
-            HorizontalDivider()
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onBlockedUsersClick)
-                    .padding(vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "Blocked users ›",
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "Manage accounts you've blocked",
-                    fontSize = 12.sp,
-                    color = Color.DarkGray
-                )
-            }
-        }
-
-        SettingsCard("About", CardPurple, Purple) {
-            SettingsChoice(
-                title = "HipPop",
-                value = "App information",
-                onClick = { showAbout = true }
-            )
-        }
-        OutlinedButton(
-            onClick = onLogoutClick,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, Color(0xFF843FC0)),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = Color(0xE9823FCB)
-            )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Text(
-                text = "Log Out",
-                fontSize = 16.sp,
+                text = "Settings ⚙",
+                color = Purple,
+                fontSize = 27.sp,
                 fontWeight = FontWeight.Bold
             )
+            Text("Make HipPop your own", color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            SettingsCard("Appearance", CardPurple, Purple) {
+                SettingsChoice(
+                    title = "Theme",
+                    value = appearance,
+                    onClick = { openDialog = "Theme" }
+                )
+            }
+
+            SettingsCard("Audio", CardPurple, Purple) {
+                SettingsSwitch(
+                    title = "Music",
+                    description = "Play music while using the app",
+                    checked = musicOn,
+                    onCheckedChange = { musicOn = it }
+                )
+                HorizontalDivider()
+
+                SettingsSwitch(
+                    title = "Sound effects",
+                    description = "Play sounds when you interact with the app",
+                    checked = soundEffectsOn,
+                    onCheckedChange = { soundEffectsOn = it }
+                )
+                HorizontalDivider()
+
+                SettingsChoice("Audio quality", audioQuality) {
+                    openDialog = "Audio quality"
+                }
+                HorizontalDivider()
+
+                SettingsChoice("Equalizer", equalizer) {
+                    openDialog = "Equalizer"
+                }
+                HorizontalDivider()
+
+                SettingsSwitch(
+                    title = "Sound Check",
+                    description = "Keep songs at a more consistent volume",
+                    checked = soundCheckOn,
+                    onCheckedChange = { soundCheckOn = it }
+                )
+                HorizontalDivider()
+
+                SettingsChoice("Song transitions", transitions) {
+                    openDialog = "Song transitions"
+                }
+            }
+
+            SettingsCard("Downloads", CardPurple, Purple) {
+                SettingsSwitch(
+                    title = "Download over mobile data",
+                    description = "Allow downloads without Wi-Fi",
+                    checked = mobileDownloadsOn,
+                    onCheckedChange = { mobileDownloadsOn = it }
+                )
+            }
+
+            SettingsCard("Privacy", CardPurple, Purple) {
+                SettingsAccountPrivacy()
+
+                HorizontalDivider()
+
+                SettingsChoice(
+                    title = "Blocked users",
+                    value = "Manage",
+                    onClick = onBlockedUsersClick
+                )
+            }
+
+            SettingsCard("Account", CardPurple, Purple) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onProfileClick)
+                        .padding(vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Profile ›",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Your songs and account information",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            SettingsCard("About", CardPurple, Purple) {
+                SettingsChoice(
+                    title = "HipPop",
+                    value = "App information",
+                    onClick = { showAbout = true }
+                )
+            }
+            OutlinedButton(
+                onClick = onLogoutClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, Color(0xFF843FC0)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color(0xE9823FCB)
+                )
+            ) {
+                Text(
+                    text = "Log Out",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 
     val options = when (openDialog) {
+        "Theme" -> listOf("System default", "Light", "Dark")
         "Audio quality" -> listOf("Standard", "High")
         "Equalizer" -> listOf("Off", "Bass boost", "Treble boost")
         "Song transitions" -> listOf("Off", "Short fade", "Long fade")
@@ -205,6 +229,7 @@ fun SettingsScreen(viewModel: LandingScreenVM,
                                 .fillMaxWidth()
                                 .clickable {
                                     when (openDialog) {
+                                        "Theme" -> saveAppearance(context, option)
                                         "Audio quality" -> audioQuality = option
                                         "Equalizer" -> equalizer = option
                                         "Song transitions" -> transitions = option
@@ -280,7 +305,7 @@ private fun SettingsSwitch(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(title, fontWeight = FontWeight.SemiBold)
-            Text(description, fontSize = 12.sp, color = Color.DarkGray)
+            Text(description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(
             checked = checked,
@@ -303,6 +328,175 @@ private fun SettingsChoice(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(title, fontWeight = FontWeight.SemiBold)
-        Text("$value ›", color = Color.DarkGray)
+        Text("$value ›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SettingsAccountPrivacy() {
+    val app = LocalContext.current.applicationContext as Application
+
+    // Separate instance so viewing another user's profile
+    // cannot change which account Settings edits.
+    val privacyViewModel: ProfileScreenVM = viewModel(
+        key = "settings-account-privacy",
+        initializer = { ProfileScreenVM(app) }
+    )
+
+    val auth = remember { FirebaseAuth.getInstance() }
+    val db = remember { FirebaseFirestore.getInstance() }
+
+    var currentUid by remember {
+        mutableStateOf(auth.currentUser?.uid)
+    }
+
+    var accountUsername by remember(currentUid) {
+        mutableStateOf("")
+    }
+
+    var privateAccount by remember(currentUid) {
+        mutableStateOf(false)
+    }
+
+    var loaded by remember(currentUid) {
+        mutableStateOf(false)
+    }
+
+    var saving by remember(currentUid) {
+        mutableStateOf(false)
+    }
+
+    var privacyError by remember(currentUid) {
+        mutableStateOf<String?>(null)
+    }
+
+    DisposableEffect(auth) {
+        val listener = FirebaseAuth.AuthStateListener {
+            currentUid = it.currentUser?.uid
+        }
+
+        auth.addAuthStateListener(listener)
+
+        onDispose {
+            auth.removeAuthStateListener(listener)
+        }
+    }
+
+    DisposableEffect(currentUid) {
+        var active = true
+        loaded = false
+        privacyError = null
+
+        val uid = currentUid
+
+        val listener = if (uid != null) {
+            db.collection("users")
+                .document(uid)
+                .addSnapshotListener { document, exception ->
+                    if (active) {
+                        if (exception != null) {
+                            loaded = false
+                            privacyError = exception.localizedMessage
+                                ?: "Unable to load privacy settings."
+                        } else if (
+                            document == null || !document.exists()
+                        ) {
+                            loaded = false
+                            privacyError = "Account profile not found."
+                        } else {
+                            // Use the login username, not displayName.
+                            accountUsername =
+                                document.getString("username").orEmpty()
+
+                            privateAccount =
+                                document.getBoolean("privacy") ?: false
+
+                            loaded = accountUsername.isNotBlank()
+
+                            if (!loaded) {
+                                privacyError =
+                                    "Your account username is missing."
+                            }
+                        }
+                    }
+                }
+        } else {
+            null
+        }
+
+        onDispose {
+            active = false
+            listener?.remove()
+        }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "Private account",
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Text(
+                text = when {
+                    currentUid == null -> "Please sign in first."
+                    saving -> "Saving…"
+                    !loaded -> "Loading privacy settings…"
+                    privateAccount ->
+                        "Only friends can view your full profile."
+
+                    else ->
+                        "Your profile is public."
+                },
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Switch(
+            checked = privateAccount,
+            enabled = loaded && !saving && currentUid != null,
+            onCheckedChange = { makePrivate ->
+                val uid = currentUid
+
+                if (uid != null && !saving) {
+                    saving = true
+                    privacyError = null
+
+                    privacyViewModel.setPrivacy(
+                        myUid = uid,
+                        username = accountUsername,
+                        private = makePrivate,
+                        onSuccess = {
+                            if (auth.currentUser?.uid == uid) {
+                                privateAccount = makePrivate
+                                saving = false
+                            }
+                        },
+                        onError = { message ->
+                            if (auth.currentUser?.uid == uid) {
+                                saving = false
+                                privacyError = message
+                            }
+                        }
+                    )
+                }
+            }
+        )
+    }
+
+    privacyError?.let {
+        Text(
+            text = it,
+            color = Color(0xFFB3261E),
+            fontSize = 12.sp
+        )
     }
 }
