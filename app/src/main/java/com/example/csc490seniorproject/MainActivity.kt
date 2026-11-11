@@ -39,6 +39,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.MetadataChanges
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.outlined.Email
 
 class MainActivity : ComponentActivity() {
     private val auth by lazy { FirebaseAuth.getInstance() }
@@ -93,6 +95,12 @@ class MainActivity : ComponentActivity() {
                         iconSelected = Icons.Filled.Add,
                         iconUnselected = Icons.Outlined.Add,
                         route = "MySongsScreen"
+                    ),
+                    NavItem(
+                        title = "Messages",
+                        iconSelected = Icons.Filled.Email,
+                        iconUnselected = Icons.Outlined.Email,
+                        route = "MessagesScreen"
                     ),
                     NavItem(
                         title = "Profile",

@@ -82,7 +82,7 @@ import androidx.compose.material3.Switch
 import com.google.firebase.firestore.Filter
 import com.google.firebase.firestore.SetOptions
 
-private enum class ProfileTab { SONGS, FRIENDS, CHATS }
+private enum class ProfileTab { SONGS, FRIENDS }
 @Composable
 fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, username: String,profileID: String? = null) {
     var isEditing by remember(username) {
@@ -800,17 +800,6 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                         modifier = Modifier.weight(1f),
                         onClick = { selectedTab = ProfileTab.FRIENDS }
                     )
-
-                    if (currentUid != null && currentUid == profileUid) {
-                        ProfileTabCard(
-                            label = "Messages",
-                            imageRes = R.drawable.chat,
-                            selected = selectedTab == ProfileTab.CHATS,
-                            font = fredoka,
-                            modifier = Modifier.weight(1f),
-                            onClick = { selectedTab = ProfileTab.CHATS }
-                        )
-                    }
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -819,7 +808,6 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                     text = when (selectedTab) {
                         ProfileTab.SONGS -> "Songs"
                         ProfileTab.FRIENDS -> "Friends"
-                        ProfileTab.CHATS -> "Messages"
                     },
                     fontFamily = fredoka,
                     fontSize = 20.sp
@@ -841,7 +829,7 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "This account is private. Add $editableUsername as a friend to see their songs, friends, and messages.",
+                        text = "This account is private. Add $editableUsername as a friend to see their songs and friends.",
                         fontFamily = fredoka,
                         fontSize = 13.sp,
                         color = Color(0xFF444444),
@@ -1043,18 +1031,6 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                                     Text("Visit Profile", fontFamily = fredoka)
                                 }
                             }
-                        }
-                    }
-                }
-
-                ProfileTab.CHATS -> {
-                    if (currentUid != null && currentUid == profileUid) {
-                        item {
-                            ChatBox(
-                                modifier = Modifier.fillMaxWidth(),
-                                friendUsernames = friendsList.map { it.username },
-                                navController = navController
-                            )
                         }
                     }
                 }

@@ -45,6 +45,7 @@ import com.example.csc490seniorproject.viewmodels.SearchScreenVM
 import com.example.csc490seniorproject.viewmodels.SongScreenVM
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.example.csc490seniorproject.screens.ChatBox
 
 @Composable
 fun Nav(
@@ -164,6 +165,13 @@ fun Nav(
             SearchScreen(
                 viewModel = searchScreenVM,
                 navController = navController,
+            )
+        }
+
+        composable(route = "MessagesScreen") {
+            ChatBox(
+                modifier = Modifier.fillMaxSize(),
+                navController = navController
             )
         }
 

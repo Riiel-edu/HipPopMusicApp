@@ -34,7 +34,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun ChatBox(modifier: Modifier, friendUsernames: List<String> = emptyList(), navController: NavController) {
+fun ChatBox(modifier: Modifier, navController: NavController) {
     val db = remember { FirebaseFirestore.getInstance() }
     val auth = remember { FirebaseAuth.getInstance() }
     val chatPurple = Color(0xFF6938EF)
@@ -610,43 +610,38 @@ fun ChatBox(modifier: Modifier, friendUsernames: List<String> = emptyList(), nav
             }
         }
 
-        // Resolve usernames supplied by ProfileScreen.
-        val names = friendUsernames.distinct().sorted()
-
-        DisposableEffect(uid, names) {
+        // Load this account's friends directly instead of relying on a caller to supply them.
+        DisposableEffect(uid) {
             var active = true
-            friendIds.clear()
 
-            names.filter { it.isNotBlank() }.forEach { name ->
-                db.collection("users")
-                    .whereEqualTo("username", name)
-                    .limit(2)
-                    .get()
-                    .addOnSuccessListener { result ->
-                        if (active && result.documents.size == 1) {
-                            val document = result.documents.first()
+            val registration = db.collection("users")
+                .document(uid)
+                .collection("friends")
+                .addSnapshotListener { snapshot, exception ->
+                    if (!active || exception != null) return@addSnapshotListener
 
-                            if (document.id != uid) {
-                                people[document.id] = MessengerPerson(
-                                    uid = document.id,
-                                    username = document.getString("username") ?: name
-                                )
+                    val ids = snapshot?.documents.orEmpty().map { it.id }
+                    friendIds.clear()
+                    friendIds.addAll(ids)
 
-                                if (document.id !in friendIds) {
-                                    friendIds.add(document.id)
+                    ids.forEach { friendId ->
+                        if (people[friendId] == null) {
+                            db.collection("users").document(friendId).get()
+                                .addOnSuccessListener { document ->
+                                    if (active) {
+                                        people[friendId] = MessengerPerson(
+                                            uid = friendId,
+                                            username = document.getString("username") ?: friendId
+                                        )
+                                    }
                                 }
-                            }
                         }
                     }
-                    .addOnFailureListener {
-                        if (active) {
-                            error = it.localizedMessage ?: "Couldn't load friends."
-                        }
-                    }
-            }
+                }
 
             onDispose {
                 active = false
+                registration.remove()
             }
         }
 
