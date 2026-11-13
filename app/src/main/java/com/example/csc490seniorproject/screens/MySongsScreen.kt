@@ -76,7 +76,7 @@ fun MySongsScreen(navController: NavController, viewModel: MySongsVM = viewModel
     val songs by viewModel.songs.collectAsState()
     val error by viewModel.error.collectAsState()
     val fredoka = FontFamily(Font(R.font.fredoka_medium, FontWeight.Normal))
-
+    var templates by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var showCreate by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Song?>(null) }
 
@@ -221,7 +221,12 @@ fun MySongsScreen(navController: NavController, viewModel: MySongsVM = viewModel
         }
 
         FloatingActionButton(
-            onClick = { showCreate = true },
+            onClick = {
+                viewModel.getTemplates { list ->
+                    templates = list
+                }
+                showCreate = true
+            },
             containerColor = Color(0xFF5d36eb),
             contentColor = Color.White,
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
@@ -234,10 +239,19 @@ fun MySongsScreen(navController: NavController, viewModel: MySongsVM = viewModel
             initialName = "",
             initialGenres = emptyList(),
             confirmLabel = "Create",
+            templates = templates,
+            onTemplateClick = { templateId ->
+                showCreate = false
+                viewModel.createSongFromTemplate(templateId) { id ->
+                    navController.navigate("EditorScreen/$id")
+                }
+            },
             onDismiss = { showCreate = false },
             onConfirm = { name, genres ->
                 showCreate = false
-                viewModel.createSong(name, genres) { id -> navController.navigate("EditorScreen/$id") }
+                viewModel.createSong(name, genres) { id ->
+                    navController.navigate("EditorScreen/$id")
+                }
             }
         )
     }
@@ -267,7 +281,9 @@ fun SongDetailsDialog(
     initialGenres: List<String>,
     confirmLabel: String,
     onDismiss: () -> Unit,
-    onConfirm: (String, List<String>) -> Unit
+    onConfirm: (String, List<String>) -> Unit,
+    templates: List<Pair<String, String>> = emptyList(),
+    onTemplateClick: (String) -> Unit = {}
 ) {
     var name by remember { mutableStateOf(initialName) }
     var genres by remember { mutableStateOf(initialGenres) }
@@ -293,7 +309,26 @@ fun SongDetailsDialog(
                         )
                     }
                 }
+                Text("Start from a template")
+
+                templates.forEach { template ->
+                    Button(
+                        onClick = { onTemplateClick(template.first) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF5D36EB),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = template.second,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
+
         },
         confirmButton = { TextButton(onClick = { onConfirm(name.trim(), genres) }) { Text(confirmLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
