@@ -963,6 +963,15 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                             friend.uid.ifBlank { friend.username }
                         }
                     ) { friend ->
+                        var friendPfp by remember(friend.username) {
+                            mutableStateOf("")
+                        }
+
+                        LaunchedEffect(friend.username) {
+                            viewModel.getFriendPfp(friend.username) { url ->
+                                friendPfp = url
+                            }
+                        }
                         Surface(
                             color = ProfileCardPurple,
                             shape = RoundedCornerShape(10.dp),
@@ -974,8 +983,8 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Image(
-                                        painter = painterResource(R.drawable.default_pfp),
+                                    coil.compose.AsyncImage(
+                                        model = friendPfp.ifBlank { R.drawable.default_pfp },
                                         contentDescription = "Friend profile picture",
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier
