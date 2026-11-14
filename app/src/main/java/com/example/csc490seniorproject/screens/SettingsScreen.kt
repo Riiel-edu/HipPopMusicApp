@@ -44,7 +44,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import androidx.compose.material3.MaterialTheme
 import com.example.csc490seniorproject.ui.theme.rememberAppearance
 import com.example.csc490seniorproject.ui.theme.saveAppearance
-
+import com.example.csc490seniorproject.moderation.Moderation.Companion.ModeratorSettingsEntry
 
 @Composable
 fun SettingsScreen(
@@ -52,6 +52,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     onProfileClick: () -> Unit = {},
     onBlockedUsersClick: () -> Unit = {},
+    onModeratorClick: () -> Unit = {},
     onLogoutClick: () -> Unit
 ) {
 
@@ -91,6 +92,8 @@ fun SettingsScreen(
                 fontWeight = FontWeight.Bold
             )
             Text("Make HipPop your own", color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            ModeratorSettingsEntry(onClick = onModeratorClick)
 
             SettingsCard("Appearance", CardPurple, Purple) {
                 SettingsChoice(

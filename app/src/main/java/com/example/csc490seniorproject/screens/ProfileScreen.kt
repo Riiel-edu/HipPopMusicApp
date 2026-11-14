@@ -82,6 +82,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import com.google.firebase.firestore.Filter
 import com.google.firebase.firestore.SetOptions
+import com.example.csc490seniorproject.moderation.Reporting.Companion.ReportUserButton
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 
 private enum class ProfileTab { SONGS, FRIENDS }
 @Composable
@@ -124,8 +129,9 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
     var currentUid by remember() {
         mutableStateOf( auth.currentUser?.uid)
     }
-
-
+    var profileMenuExpanded by remember(currentUid, profileID) {
+        mutableStateOf(false)
+    }
 
     val ProfilePurple = Color(0xFF5D36EB)
     val ProfileCardPurple = Color(0xFFBFB1FA)
@@ -372,8 +378,7 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item{
-
+        item {
             if (viewModel.profileBlocked) {
                 Text(
                     text = "Profile unavailable",
@@ -479,10 +484,85 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                         Column(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text(
-                                text = editableUsername,
-                                fontFamily = fredoka
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = editableUsername,
+                                    fontFamily = fredoka,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                val targetUid = profileID
+                                val myUid = currentUid
+
+                                if (
+                                    myUid != null &&
+                                    !targetUid.isNullOrBlank() &&
+                                    targetUid != myUid
+                                ) {
+                                    ReportUserButton(
+                                        targetUid = targetUid,
+                                        targetUsername = editableUsername,
+                                        trigger = { openReport ->
+                                            Box {
+                                                IconButton(
+                                                    onClick = {
+                                                        profileMenuExpanded = true
+                                                    }
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.MoreVert,
+                                                        contentDescription = "Profile options"
+                                                    )
+                                                }
+
+                                                DropdownMenu(
+                                                    expanded = profileMenuExpanded,
+                                                    onDismissRequest = {
+                                                        profileMenuExpanded = false
+                                                    }
+                                                ) {
+                                                    if (
+                                                        viewModel.friendStatus ==
+                                                        FriendStatus.FRIENDS
+                                                    ) {
+                                                        DropdownMenuItem(
+                                                            text = { Text("Unfriend") },
+                                                            onClick = {
+                                                                profileMenuExpanded = false
+                                                                // TODO: Teammate adds functionality.
+                                                            }
+                                                        )
+                                                    }
+
+                                                    DropdownMenuItem(
+                                                        text = { Text("Report user") },
+                                                        onClick = {
+                                                            profileMenuExpanded = false
+                                                            openReport()
+                                                        }
+                                                    )
+
+                                                    DropdownMenuItem(
+                                                        text = {
+                                                            Text(
+                                                                "Block user",
+                                                                color = Color(0xFFB3261E)
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            profileMenuExpanded = false
+                                                            showBlockDialog = true
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                            }
 
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -723,18 +803,6 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                                         Text("✓ Friends", fontFamily = fredoka)
                                     }
                                 }
-                            }
-
-                            Spacer(Modifier.height(4.dp))
-
-                            TextButton(
-                                onClick = { showBlockDialog = true }
-                            ) {
-                                Text(
-                                    "Block user",
-                                    fontFamily = fredoka,
-                                    color = Color(0xFFB3261E)
-                                )
                             }
                         }
                     }
