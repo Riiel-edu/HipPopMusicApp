@@ -227,7 +227,7 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
         mutableStateOf<String?>(null)
     }
 
-    DisposableEffect(profileUid, currentUid, username) {
+    DisposableEffect(profileUid, currentUid, username, viewModel.friendStatus) {
         var active = true
         songsList.clear()
         descriptions.clear()
@@ -248,11 +248,23 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
             // any branch of the rule on its own (you're not the owner), so
             // Firestore can't prove the request is safe and denies it outright
             // -- even though some of their songs would individually pass. This
-            // query instead asks only for their songs that are published OR
-            // specifically shared with you, which mirrors the rule's other two
-            // branches exactly and is provably safe.
+            // query instead asks only for their songs that are published,
+            // specifically shared with you, or -- once we've actually
+            // confirmed you're friends -- friends-only, which mirrors the
+            // rule's remaining branches exactly and is provably safe.
             val query = if (targetUid == myUid) {
                 db.collection("songs").whereEqualTo("ownerId", targetUid)
+            } else if (viewModel.friendStatus == FriendStatus.FRIENDS) {
+                db.collection("songs").where(
+                    Filter.and(
+                        Filter.equalTo("ownerId", targetUid),
+                        Filter.or(
+                            Filter.equalTo("published", true),
+                            Filter.arrayContains("sharedWith", myUid),
+                            Filter.equalTo("friendsOnly", true)
+                        )
+                    )
+                )
             } else {
                 db.collection("songs").where(
                     Filter.and(

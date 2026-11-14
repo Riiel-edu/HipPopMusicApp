@@ -61,7 +61,21 @@ object SongRepository {
 
     suspend fun setPublished(id: String, published: Boolean) {
         songs.document(id).update(
-            mapOf("published" to published, "updatedAt" to FieldValue.serverTimestamp())
+            mapOf(
+                "published" to published,
+                "friendsOnly" to false,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+        ).await()
+    }
+
+    suspend fun setFriendsOnly(id: String, friendsOnly: Boolean) {
+        songs.document(id).update(
+            mapOf(
+                "friendsOnly" to friendsOnly,
+                "published" to false,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
         ).await()
     }
 }

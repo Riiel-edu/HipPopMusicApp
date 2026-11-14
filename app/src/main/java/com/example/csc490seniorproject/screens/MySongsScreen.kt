@@ -161,6 +161,15 @@ fun MySongsScreen(navController: NavController, viewModel: MySongsVM = viewModel
                                                     onClick = { expanded = false; viewModel.togglePublish(currentItem) }
                                                 )
                                                 DropdownMenuItem(
+                                                    text = {
+                                                        Text(
+                                                            if (currentItem.friendsOnly) "Remove Friends-Only" else "Make Friends-Only"
+                                                        )
+                                                    },
+                                                    enabled = !currentItem.published,
+                                                    onClick = { expanded = false; viewModel.toggleFriendsOnly(currentItem) }
+                                                )
+                                                DropdownMenuItem(
                                                     text = { Text("Delete Song") },
                                                     onClick = { expanded = false; viewModel.delete(currentItem.id) }
                                                 )
@@ -178,7 +187,13 @@ fun MySongsScreen(navController: NavController, viewModel: MySongsVM = viewModel
                                         Text(
                                             buildString {
                                                 append(if (currentItem.genre.isEmpty()) "No genre" else currentItem.genre.joinToString(", "))
-                                                append(if (currentItem.published) " • Published" else " • Private")
+                                                append(
+                                                    when {
+                                                        currentItem.published -> " • Published"
+                                                        currentItem.friendsOnly -> " • Friends only"
+                                                        else -> " • Private"
+                                                    }
+                                                )
                                             },
                                             fontFamily = fredoka,
                                             fontSize = 13.sp,

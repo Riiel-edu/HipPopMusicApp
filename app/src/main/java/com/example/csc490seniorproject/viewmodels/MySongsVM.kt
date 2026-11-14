@@ -119,6 +119,11 @@ class MySongsVM : ViewModel() {
         catch (e: Exception) { _error.value = "Couldn't publish: ${e.message}" }
     }
 
+    fun toggleFriendsOnly(song: Song) = viewModelScope.launch {
+        try { SongRepository.setFriendsOnly(song.id, !song.friendsOnly); refresh() }
+        catch (e: Exception) { _error.value = "Couldn't update visibility: ${e.message}" }
+    }
+
     fun delete(id: String) = viewModelScope.launch {
         try { SongRepository.deleteSong(id); refresh() }
         catch (e: Exception) { _error.value = "Couldn't delete: ${e.message}" }
