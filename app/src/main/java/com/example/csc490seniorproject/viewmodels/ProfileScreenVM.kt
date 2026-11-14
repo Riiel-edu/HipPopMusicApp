@@ -406,7 +406,9 @@ enum class FriendStatus { NONE, REQUEST_SENT, REQUEST_RECEIVED, FRIENDS }
                             profilePictureUrl = ""
                         }
                         .addOnCompleteListener {
-                            if (displayName.isNullOrBlank()) {
+                            val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+
+                            if (displayName.isNullOrBlank() && auth.currentUser?.uid == myUid) {
                                 println("FIREBASE: displayName is blank; updating it")
 
                                 db.collection("users").document(myUid)
