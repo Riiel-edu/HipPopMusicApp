@@ -245,6 +245,7 @@ enum class FriendStatus { NONE, REQUEST_SENT, REQUEST_RECEIVED, FRIENDS }
     }
 
     fun getFriends(uid: String) {
+
         println("friends: getFriends() called with uid = $uid")
         friendsList.clear()
 
@@ -305,7 +306,36 @@ enum class FriendStatus { NONE, REQUEST_SENT, REQUEST_RECEIVED, FRIENDS }
                     }
             }
     }
+    fun getFriendPfp(username: String, onResult: (String) -> Unit) {
+        db.collection("usernames")
+            .document(username.lowercase())
+            .get()
+            .addOnSuccessListener { document ->
 
+                val uid = document.getString("uid")
+
+                if (uid != null) {
+                    FirebaseStorage.getInstance(
+                        "gs://senior-project-13e67.firebasestorage.app"
+                    ).reference
+                        .child("profilePictures/$uid.jpg")
+                        .downloadUrl
+                        .addOnSuccessListener { onResult(it.toString()) }
+                        .addOnFailureListener {
+                            println("PROFILE: Failed to load friend pfp: ${it.message}")
+                            onResult("")
+                        }
+                } else {
+                    onResult("")
+                }
+            }
+            .addOnFailureListener {
+                println("PROFILE: Username lookup failed: ${it.message}")
+                onResult("")
+            }
+
+
+    }
     fun sendFriendRequest(myUid: String, targetUid: String) {
         db.collection("users").document(targetUid).collection("friendRequests").document(myUid)
             .set(mapOf("from" to myUid, "createdAt" to FieldValue.serverTimestamp()))
