@@ -1,8 +1,12 @@
 package com.example.csc490seniorproject.screens
 
+import android.annotation.SuppressLint
+import androidx.activity.ComponentActivity
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -32,11 +36,29 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.csc490seniorproject.R
+import com.example.csc490seniorproject.data.CollaborationRepository
+import com.example.csc490seniorproject.data.SongRepository
+import com.example.csc490seniorproject.objects.Song
+import com.example.csc490seniorproject.viewmodels.CollaborationViewModel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+
+@SuppressLint("ContextCastToActivity")
 @Composable
 fun ChatBox(modifier: Modifier, navController: NavController) {
     val db = remember { FirebaseFirestore.getInstance() }
     val auth = remember { FirebaseAuth.getInstance() }
     val chatPurple = Color(0xFF6938EF)
+    val scope = rememberCoroutineScope()
+    val collabVm: CollaborationViewModel = viewModel(LocalContext.current as ComponentActivity)
 
     data class MessengerPerson(
         val uid: String,
@@ -53,7 +75,9 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
         val beatmapId: String? = null,
         val songId: String? = null,
         val beatmapTitle: String? = null,
-        val status: String? = null
+        val status: String? = null,
+        val sessionId: String? = null,
+        val songName: String? = null
     )
 
     var currentUid by remember {
@@ -166,6 +190,12 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
             mutableStateOf(false)
         }
 
+        var showSongPicker by remember { mutableStateOf(false) }
+
+        var availableSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+
+        var loadingSongs by remember { mutableStateOf(false) }
+
         val handledInvitations = remember {
             mutableSetOf<String>()
         }
@@ -209,13 +239,122 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
                 }
         }
 
+        fun loadInviteSongs() {
+            if (loadingSongs) return
+            loadingSongs = true
+
+            scope.launch {
+                try {
+                    availableSongs = SongRepository.mySongs(uid)
+                    showSongPicker = true
+                } catch (e: Exception) {
+                    error = e.localizedMessage ?: "Couldn't load your songs."
+                } finally {
+                    loadingSongs = false
+                }
+            }
+        }
+
+        fun startCoopInvite(song: Song) {
+            val recipient = selectedUid
+
+            if (recipient == null || auth.currentUser?.uid != uid) {
+                error = "Please reopen the conversation."
+                return
+            }
+            if (sendingInvite) return
+
+            sendingInvite = true
+            error = ""
+
+            scope.launch {
+                var createdSessionId: String? = null
+                try {
+                    val sessionId = CollaborationRepository.createSession(song)
+                    createdSessionId = sessionId
+
+                    db.collection("chatMessages")
+                        .add(
+                            hashMapOf(
+                                "senderId" to uid,
+                                "recipientId" to recipient,
+                                "participants" to listOf(uid, recipient),
+                                "text" to "Collab!",
+                                "type" to "COOP_INVITE",
+                                "sessionId" to sessionId,
+                                "songId" to song.id,
+                                "songName" to song.name,
+                                "status" to "PENDING",
+                                "createdAt" to FieldValue.serverTimestamp()
+                            )
+                        )
+                        .await()
+
+                    collabVm.startObserving(sessionId)
+                    showSongPicker = false
+                    selectedUid = null
+
+                    navController.navigate("EditorScreen/${song.id}") {
+                        launchSingleTop = true
+                    }
+                } catch (e: Exception) {
+                    // Don't leave an orphan session behind if the invite didn't go out.
+                    createdSessionId?.let {
+                        runCatching { CollaborationRepository.leaveSession(it) }
+                    }
+                    error = e.localizedMessage ?: "Couldn't send invitation."
+                } finally {
+                    sendingInvite = false
+                }
+            }
+        }
+
+        fun acceptCoopInvite(message: MessengerMessage) {
+            val sessionId = message.sessionId
+            val songId = message.songId
+
+            if (
+                auth.currentUser?.uid != uid ||
+                message.recipientId != uid ||
+                message.type != "COOP_INVITE" ||
+                message.status != "PENDING"
+            ) {
+                error = "This invitation is no longer available."
+                return
+            }
+            if (sessionId.isNullOrBlank() || songId.isNullOrBlank()) {
+                error = "This invitation is missing session information."
+                return
+            }
+            if (sendingInvite) return
+
+            sendingInvite = true
+            error = ""
+
+            scope.launch {
+                try {
+                    CollaborationRepository.acceptInvite(message.id, sessionId)
+                    collabVm.startObserving(sessionId)
+                    selectedUid = null
+
+                    navController.navigate("EditorScreen/$songId") {
+                        launchSingleTop = true
+                    }
+                } catch (e: Exception) {
+                    error = e.localizedMessage ?: "Couldn't accept invitation."
+                } finally {
+                    sendingInvite = false
+                }
+            }
+        }
+
         if (showInviteTypeDialog) {
             AlertDialog(
                 onDismissRequest = {
                     showInviteTypeDialog = false
                 },
                 title = {
-                    Text("Send Game Invitation")
+                    Text("Choose Your Gamemode")
                 },
                 text = {
                     Column(
@@ -223,28 +362,92 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
                     ) {
                         Text("What would you like to play?")
 
-                        OutlinedButton(
-                            onClick = {
-                                showInviteTypeDialog = false
-                                loadInviteBeatmaps()
-                            },
-                            modifier = Modifier.fillMaxWidth()
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Text("⚔️  VS")
-                        }
+                            // DUEL image button
+                            Image(
+                                painter = painterResource(R.drawable.hippop_duel),
+                                contentDescription = "DUEL",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f)
+                                    .clickable {
+                                        showInviteTypeDialog = false
+                                        loadInviteBeatmaps()
+                                    }
+                            )
 
-                        OutlinedButton(
-                            onClick = {
-                                // Co-op invitations will be implemented later.
-                                showInviteTypeDialog = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("🤝  Co-op")
+                            // COLLAB image button
+                            Image(
+                                painter = painterResource(R.drawable.hippop_collab),
+                                contentDescription = "COLLAB",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f)
+                                    .clickable {
+                                        showInviteTypeDialog = false
+                                        loadInviteSongs()
+                                    }
+                            )
                         }
                     }
                 },
                 confirmButton = {}
+            )
+        }
+
+        if (showSongPicker) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (!sendingInvite) showSongPicker = false
+                },
+                title = {
+                    Text("Choose a Song")
+                },
+                text = {
+                    if (availableSongs.isEmpty()) {
+                        Text("You don't have any songs yet.")
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 400.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(availableSongs, key = { it.id }) { song ->
+                                Surface(
+                                    onClick = { startCoopInvite(song) },
+                                    enabled = !sendingInvite,
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0xFFF7F4FF),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(
+                                            text = song.name,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "${song.bpm} BPM • ${song.tracks.size} tracks",
+                                            color = Color.Gray,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = !sendingInvite,
+                        onClick = { showSongPicker = false }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
             )
         }
 
@@ -507,7 +710,9 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
                                         beatmapId = document.getString("beatmapId"),
                                         songId = document.getString("songId"),
                                         beatmapTitle = document.getString("beatmapTitle"),
-                                        status = document.getString("status")
+                                        status = document.getString("status"),
+                                        sessionId = document.getString("sessionId"),
+                                        songName = document.getString("songName")
                                     )
                                 }
                                 .sortedWith(
@@ -863,12 +1068,18 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
         }
 
         Surface(
-            modifier = modifier.fillMaxWidth(),
+            modifier = modifier
+                .fillMaxWidth()
+                .fillMaxHeight(),
             shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface
         ) {
-            Column(Modifier.padding(14.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp)
+            ) {
                 if (selectedUid == null || selectedUid?.let { isBlocked(it) } == true) {
                     OutlinedTextField(
                         value = search,
@@ -927,6 +1138,7 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
                         searchFocused || search.isNotBlank()
 
                     LazyColumn(
+
                         modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(
@@ -1187,7 +1399,9 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
 
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxWidth().height(300.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(vertical = 8.dp)
                     ) {
@@ -1212,7 +1426,8 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
                         ) { message ->
 
                             val mine = message.senderId == uid
-                            val isVsInvite = message.type == "VS_INVITE"
+                            val isCoopInvite = message.type == "COOP_INVITE"
+                            val isVsInvite = message.type == "VS_INVITE" || isCoopInvite
 
                             Row(
                                 modifier = Modifier.    fillMaxWidth(),
@@ -1222,112 +1437,38 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
                                     Arrangement.Start
                                 }
                             ) {
+
                                 if (isVsInvite) {
-
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.surface,
-                                        contentColor = MaterialTheme.colorScheme.onSurface,
-                                        shape = RoundedCornerShape(18.dp),
-                                        modifier = Modifier.widthIn(max = 280.dp)
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(14.dp),
-                                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            Text(
-                                                text = "⚔️ VS CHALLENGE",
-                                                fontWeight = FontWeight.Bold,
-                                                color = chatPurple
-                                            )
-
-                                            Text(
-                                                text = message.beatmapTitle
-                                                    ?: "Unknown Beatmap",
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-
-                                            Text(
-                                                text = if (mine) {
-                                                    "You challenged your friend!"
+                                    GameInviteCard(
+                                        isCollab = isCoopInvite,
+                                        senderName = people[message.senderId]?.username
+                                            ?: "Your friend",
+                                        contentName = (
+                                                if (isCoopInvite) {
+                                                    message.songName
                                                 } else {
-                                                    "${people[message.senderId]?.username ?: "Your friend"} challenged you!"
-                                                },
-                                                color = Color.Gray,
-                                                style = MaterialTheme.typography.bodySmall
-                                            )
-
-                                            when (message.status) {
-
-                                                "PENDING" -> {
-                                                    if (!mine) {
-                                                        Row(
-                                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                                        ) {
-                                                            Button(
-                                                                enabled = !sendingInvite,
-                                                                modifier = Modifier.weight(1f),
-                                                                colors = ButtonDefaults.buttonColors(
-                                                                    containerColor = chatPurple
-                                                                ),
-                                                                onClick = {
-                                                                    acceptVsInvite(message)
-                                                                }
-                                                            ) {
-                                                                Text("Accept")
-                                                            }
-
-                                                            OutlinedButton(
-                                                                enabled = !sendingInvite,
-                                                                modifier = Modifier.weight(1f),
-                                                                onClick = {
-                                                                    declineVsInvite(message)
-                                                                }
-                                                            ) {
-                                                                Text("Decline")
-                                                            }
-                                                        }
-                                                    } else {
-                                                        Text(
-                                                            "Waiting for response…",
-                                                            color = Color.Gray
-                                                        )
-                                                    }
+                                                    message.beatmapTitle
                                                 }
-
-                                                "ACCEPTED" -> {
-                                                    Text(
-                                                        "✓ Challenge accepted",
-                                                        color = Color(0xFF2E7D32),
-                                                        fontWeight = FontWeight.SemiBold
-                                                    )
-                                                }
-
-                                                "DECLINED" -> {
-                                                    Text(
-                                                        "Challenge declined",
-                                                        color = Color.Gray
-                                                    )
-                                                }
-
-                                                "CANCELLED" -> {
-                                                    Text(
-                                                        "Challenge cancelled",
-                                                        color = Color.Gray
-                                                    )
-                                                }
-
-                                                else -> {
-                                                    Text(
-                                                        "Invitation status unavailable",
-                                                        color = Color.Gray
-                                                    )
-                                                }
+                                                ) ?: "Unknown",
+                                        status = message.status,
+                                        mine = mine,
+                                        sending = sendingInvite,
+                                        onAccept = {
+                                            if (isCoopInvite) {
+                                                acceptCoopInvite(message)
+                                            } else {
+                                                acceptVsInvite(message)
+                                            }
+                                        },
+                                        onDecline = {
+                                            if (isCoopInvite) {
+                                                declineVsInvite(message)
+                                            } else {
+                                                declineVsInvite(message)
                                             }
                                         }
-                                    }
-
+                                    )
                                 } else {
-
                                     Surface(
                                         color = if (mine) chatPurple else Color.White,
                                         shape = RoundedCornerShape(18.dp),
@@ -1429,6 +1570,173 @@ fun ChatBox(modifier: Modifier, navController: NavController) {
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun GameInviteCard(
+    isCollab: Boolean,
+    senderName: String,
+    contentName: String,
+    status: String?,
+    mine: Boolean,
+    sending: Boolean,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    val purple = Color(0xFF6938EF)
+
+    val shape = RoundedCornerShape(20.dp)
+    val imageShape = RoundedCornerShape(14.dp)
+
+    Column(
+        modifier = Modifier
+            .widthIn(max = 320.dp)
+            .background(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color(0xFFB8A0F5),
+                        Color(0xFFDCF2FF),
+                        Color(0xFFFFD0A0),
+                        Color(0xFFFF765D)
+                    )
+                ),
+                shape = shape
+            )
+            .padding(3.dp)
+            .background(
+                Color.White,
+                shape
+            )
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+
+        Image(
+            painter = painterResource(
+                id = if (isCollab) {
+                    R.drawable.hippop_collab
+                } else {
+                    R.drawable.hippop_duel
+                }
+            ),
+            contentDescription = if (isCollab) {
+                "Collaboration invitation artwork"
+            } else {
+                "Duel invitation artwork"
+            },
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Invitation details
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text(
+                text = if (isCollab) {
+                    "$senderName wants to collaborate!"
+                } else {
+                    "$senderName challenges you!"
+                },
+                color = Color(0xFF252033),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall,
+                textAlign = TextAlign.Center
+            )
+
+            Text(
+                text = contentName,
+                color = Color(0xFF777183),
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                maxLines = 2
+            )
+        }
+
+        // Invitation status and actions
+        when (status) {
+            "PENDING" -> {
+                if (!mine) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onAccept,
+                            enabled = !sending,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = purple
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Accept")
+                        }
+
+                        OutlinedButton(
+                            onClick = onDecline,
+                            enabled = !sending,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFF6938EF)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Decline")
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Waiting for response...",
+                        color = Color(0xFFFFD166),
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                }
+            }
+
+            "ACCEPTED" -> {
+                Text(
+                    text = if (isCollab) {
+                        "✓ COLLAB ACCEPTED"
+                    } else {
+                        "✓ DUEL ACCEPTED"
+                    },
+                    color = Color(0xFF75E6A2),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
+
+            "DECLINED" -> {
+                Text(
+                    text = "INVITATION DECLINED",
+                    color = Color.LightGray,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
+
+            "CANCELLED" -> {
+                Text(
+                    text = "INVITATION CANCELLED",
+                    color = Color.LightGray,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
+
+            else -> {
+                Text(
+                    text = "INVITATION STATUS UNAVAILABLE",
+                    color = Color.LightGray,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
             }
         }
     }

@@ -57,6 +57,12 @@ import com.example.csc490seniorproject.objects.totalSteps
 
 private val fredoka = FontFamily(Font(R.font.fredoka_medium, FontWeight.Normal))
 
+// Partner-owned tracks get the same teal as the track bar, so ownership reads
+// consistently: purple = yours, teal = your partner's (read-only for you).
+private val PartnerHeader = Color(0xFF6CC3B8)
+private val PartnerRowPlain = Color(0xFFEAF7F5)
+private val PartnerRowAccidental = Color(0xFFD5EEEA)
+
 private data class RowSpec(val key: Int, val label: String, val color: Color, val isAccidental: Boolean)
 
 private val noteNames = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
@@ -104,7 +110,10 @@ fun MultiTrackEditor(
     onSeek: (Int) -> Unit,
     onOctaveChange: (trackId: String, octave: Int) -> Unit,
     onPlaceNote: (trackId: String, pitch: Int, step: Int) -> Unit,
-    onDeleteNote: (trackId: String, noteId: String) -> Unit
+    onDeleteNote: (trackId: String, noteId: String) -> Unit,
+    // --- Collaboration (optional; defaults leave solo editing unchanged) ---
+    collaborating: Boolean = false,
+    currentUserId: String? = null
 ) {
     val totalSteps = song.totalSteps()
     val stepsPerBar = song.stepsPerBar()
@@ -146,8 +155,10 @@ fun MultiTrackEditor(
                 Column {
                     song.tracks.forEachIndexed { index, track ->
                         val octave = activeOctaveByTrack[track.id] ?: 4
+                        val locked = collaborating && track.ownerId != currentUserId
                         TrackPianoRollSection(
                             track = track,
+                            locked = locked,
                             totalSteps = totalSteps,
                             stepsPerBar = stepsPerBar,
                             playheadStep = if (isPlaying) currentStep else null,
@@ -221,6 +232,7 @@ private fun SeekRuler(
 @Composable
 private fun TrackPianoRollSection(
     track: Track,
+    locked: Boolean,
     totalSteps: Int,
     stepsPerBar: Int,
     playheadStep: Int?,
@@ -236,16 +248,25 @@ private fun TrackPianoRollSection(
 
     Column {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Surface(color = Color(0xFFbfb1fa), shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) {
+            Surface(
+                color = if (locked) PartnerHeader else Color(0xFFbfb1fa),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(
-                    text = "${track.instrument.emoji()} ${track.name}",
+                    text = if (locked) {
+                        "${track.instrument.emoji()} ${track.name} · 🔒 Partner's track"
+                    } else {
+                        "${track.instrument.emoji()} ${track.name}"
+                    },
                     fontFamily = fredoka,
                     color = Color.White,
                     fontSize = 14.sp,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
-            if (!isDrums) {
+            // The octave only decides where YOUR taps land, so it's pointless on a track you can't edit.
+            if (!isDrums && !locked) {
                 Spacer(modifier = Modifier.width(8.dp))
                 OctaveStepper(octave = octave, onOctaveChange = onOctaveChange)
             }
@@ -254,10 +275,11 @@ private fun TrackPianoRollSection(
         Spacer(modifier = Modifier.height(4.dp))
 
         Row(modifier = Modifier.fillMaxWidth().height(36.dp * rows.size.coerceAtMost(6))) {
-            KeysColumn(rows = rows, vScroll = vScroll)
+            KeysColumn(rows = rows, locked = locked, vScroll = vScroll)
             NoteGrid(
                 rows = rows,
                 instrument = track.instrument,
+                locked = locked,
                 octave = octave,
                 notes = track.notes,
                 totalSteps = totalSteps,
@@ -299,14 +321,20 @@ private fun OctaveStepper(octave: Int, onOctaveChange: (Int) -> Unit) {
 }
 
 @Composable
-private fun KeysColumn(rows: List<RowSpec>, vScroll: ScrollState) {
+private fun KeysColumn(rows: List<RowSpec>, locked: Boolean, vScroll: ScrollState) {
     Column(modifier = Modifier.width(60.dp).verticalScroll(vScroll, enabled = false)) {
         rows.forEach { row ->
+            val background = when {
+                locked && row.isAccidental -> PartnerRowAccidental
+                locked -> PartnerRowPlain
+                row.isAccidental -> Color(0xFFF1EDFC)
+                else -> Color.White
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(36.dp)
-                    .background(if (row.isAccidental) Color(0xFFF1EDFC) else Color.White),
+                    .background(background),
                 contentAlignment = Alignment.Center
             ) {
                 Text(text = row.label, fontFamily = fredoka, fontSize = 11.sp, color = Color(0xFF444444), textAlign = TextAlign.Center)
@@ -319,6 +347,7 @@ private fun KeysColumn(rows: List<RowSpec>, vScroll: ScrollState) {
 private fun NoteGrid(
     rows: List<RowSpec>,
     instrument: Instrument,
+    locked: Boolean,
     octave: Int,
     notes: List<Note>,
     totalSteps: Int,
@@ -343,6 +372,8 @@ private fun NoteGrid(
         Canvas(
             modifier = Modifier
                 .size(gridWidth, gridHeight)
+                // Taps on a partner's track still reach the editor, which shows the
+                // "belongs to your partner" notice instead of changing anything.
                 .pointerInput(notes, rows, octave) {
                     detectTapGestures { offset ->
                         val step = (offset.x / cellWidthPx).toInt().coerceIn(0, totalSteps - 1)
@@ -355,8 +386,14 @@ private fun NoteGrid(
                 }
         ) {
             rows.forEachIndexed { rowIndex, row ->
+                val rowColor = when {
+                    locked && row.isAccidental -> PartnerRowAccidental
+                    locked -> PartnerRowPlain
+                    row.isAccidental -> Color(0xFFF1EDFC)
+                    else -> Color.White
+                }
                 drawRect(
-                    color = if (row.isAccidental) Color(0xFFF1EDFC) else Color.White,
+                    color = rowColor,
                     topLeft = Offset(0f, rowIndex * cellHeightPx),
                     size = Size(gridWidth.toPx(), cellHeightPx)
                 )
