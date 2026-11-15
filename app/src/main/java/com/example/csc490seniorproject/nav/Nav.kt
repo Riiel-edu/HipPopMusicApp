@@ -46,12 +46,10 @@ import com.example.csc490seniorproject.viewmodels.SongScreenVM
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.example.csc490seniorproject.screens.ChatBox
-
+import com.example.csc490seniorproject.moderation.Moderation.Companion.ModeratorScreen
 @Composable
-fun Nav(
-    navController: NavHostController,
-    modifier: Modifier
-) {
+fun Nav(navController: NavHostController, modifier: Modifier) {
+
     val app = LocalContext.current.applicationContext as Application
 
     val landingScreenVM = viewModel { LandingScreenVM(app) }
@@ -83,10 +81,17 @@ fun Nav(
 
     NavHost(
         navController = navController,
-        startDestination =
-            if (FirebaseAuth.getInstance().currentUser != null) "LandingScreen" else "LoginScreen",
+        startDestination = if (FirebaseAuth.getInstance().currentUser != null) "LandingScreen" else "LoginScreen",
         modifier = modifier
     ) {
+
+        composable(route = "ModeratorScreen") {
+            ModeratorScreen(
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
 
         composable(route = "LoginScreen") {
             LoginScreen(
@@ -189,6 +194,13 @@ fun Nav(
                 onBlockedUsersClick = {
                     navController.navigate("BlockedUsersScreen")
                 },
+
+                onModeratorClick = {
+                    navController.navigate("ModeratorScreen") {
+                        launchSingleTop = true
+                    }
+                },
+
                 onLogoutClick = {
                     FirebaseAuth.getInstance().signOut()
                     currentUsername = "Username"

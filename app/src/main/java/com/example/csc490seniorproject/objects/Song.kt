@@ -10,6 +10,7 @@ data class Song(
     @DocumentId val id: String = UUID.randomUUID().toString(),
     @ColumnInfo val ownerId: String = "",
     @ColumnInfo val published: Boolean = false,
+    @ColumnInfo val friendsOnly: Boolean = false,
     @ColumnInfo val sharedWith: List<String> = emptyList(),
     @ColumnInfo val name: String = "Untitled Song",
     @ColumnInfo val rating: Double = 0.0,

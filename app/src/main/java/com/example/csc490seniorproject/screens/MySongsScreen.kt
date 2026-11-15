@@ -161,47 +161,60 @@
                                                 modifier = Modifier.weight(1f)
                                             )
 
-                                            Box(modifier = Modifier.wrapContentSize()) {
-                                                IconButton(onClick = { expanded = true }) {
-                                                    Icon(Icons.Default.MoreVert, contentDescription = "Show menu")
-                                                }
-                                                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                                                    DropdownMenuItem(
-                                                        text = { Text("Edit Song Details") },
-                                                        onClick = { expanded = false; editing = currentItem }
-                                                    )
-                                                    DropdownMenuItem(
-                                                        text = { Text(if (currentItem.published) "Unpublish Song" else "Publish Song") },
-                                                        onClick = { expanded = false; viewModel.togglePublish(currentItem) }
-                                                    )
-                                                    DropdownMenuItem(
-                                                        text = { Text("Delete Song") },
-                                                        onClick = { expanded = false; viewModel.delete(currentItem.id) }
-                                                    )
-                                                }
+                                        Box(modifier = Modifier.wrapContentSize()) {
+                                            IconButton(onClick = { expanded = true }) {
+                                                Icon(Icons.Default.MoreVert, contentDescription = "Show menu")
+                                            }
+                                            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Edit Song Details") },
+                                                    onClick = { expanded = false; editing = currentItem }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text(if (currentItem.published) "Unpublish Song" else "Publish Song") },
+                                                    onClick = { expanded = false; viewModel.togglePublish(currentItem) }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Text(
+                                                            if (currentItem.friendsOnly) "Remove Friends-Only" else "Make Friends-Only"
+                                                        )
+                                                    },
+                                                    enabled = !currentItem.published,
+                                                    onClick = { expanded = false; viewModel.toggleFriendsOnly(currentItem) }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Delete Song") },
+                                                    onClick = { expanded = false; viewModel.delete(currentItem.id) }
+                                                )
                                             }
                                         }
 
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            shadowElevation = 4.dp,
-                                            color = Color.White,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            // Song has no description field, so this shows genre + status instead
-                                            Text(
-                                                buildString {
-                                                    append(if (currentItem.genre.isEmpty()) "No genre" else currentItem.genre.joinToString(", "))
-                                                    append(if (currentItem.published) " • Published" else " • Private")
-                                                },
-                                                fontFamily = fredoka,
-                                                fontSize = 13.sp,
-                                                color = Color(0xFF444444),
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.padding(8.dp)
-                                            )
-                                        }
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        shadowElevation = 4.dp,
+                                        color = Color.White,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        // Song has no description field, so this shows genre + status instead
+                                        Text(
+                                            buildString {
+                                                append(if (currentItem.genre.isEmpty()) "No genre" else currentItem.genre.joinToString(", "))
+                                                append(
+                                                    when {
+                                                        currentItem.published -> " • Published"
+                                                        currentItem.friendsOnly -> " • Friends only"
+                                                        else -> " • Private"
+                                                    }
+                                                )
+                                            },
+                                            fontFamily = fredoka,
+                                            fontSize = 13.sp,
+                                            color = Color(0xFF444444),
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(8.dp)
+                                        )
                                     }
                                 }
 

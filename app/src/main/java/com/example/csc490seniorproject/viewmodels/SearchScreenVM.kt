@@ -33,6 +33,7 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
     private var publicSongsListener: ListenerRegistration? = null
     private var ownSongsListener: ListenerRegistration? = null
     private var sharedSongsListener: ListenerRegistration? = null
+    private var friendSongsListener: ListenerRegistration? = null
 
     // Uids this account has blocked, used to keep them out of search
     // results. The reverse direction (did this candidate block me) is
@@ -41,9 +42,14 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
     private val blockedByMe = mutableSetOf<String>()
     private var blockedUsersListener: ListenerRegistration? = null
 
+    // This account's friends, used to pull in friends-only songs.
+    private val friendUids = mutableSetOf<String>()
+    private var friendsListener: ListenerRegistration? = null
+
     private val publicSongs = mutableMapOf<String, Song>()
     private val ownSongs = mutableMapOf<String, Song>()
     private val sharedSongs = mutableMapOf<String, Song>()
+    private val friendSongs = mutableMapOf<String, Song>()
 
     private var songsGeneration = 0
     private var searchGeneration = 0
@@ -55,15 +61,21 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
         publicSongsListener?.remove()
         ownSongsListener?.remove()
         sharedSongsListener?.remove()
+        friendSongsListener?.remove()
         blockedUsersListener?.remove()
+        friendsListener?.remove()
         publicSongsListener = null
         ownSongsListener = null
         sharedSongsListener = null
+        friendSongsListener = null
         blockedUsersListener = null
+        friendsListener = null
 
         publicSongs.clear()
         ownSongs.clear()
         sharedSongs.clear()
+        friendSongs.clear()
+        friendUids.clear()
         songsList.clear()
         userResults.clear()
         friendStatuses.clear()
@@ -89,7 +101,7 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
 
         fun mergeAndPublish() {
             if (generation != songsGeneration) return
-            val merged = (publicSongs.values + ownSongs.values + sharedSongs.values)
+            val merged = (publicSongs.values + ownSongs.values + sharedSongs.values + friendSongs.values)
                 .distinctBy { it.id }
                 .sortedBy { it.name.lowercase() }
             songsList.clear()
@@ -124,6 +136,36 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
             }
         }
 
+        fun attachFriendSongs() {
+            friendSongsListener?.remove()
+            friendSongs.clear()
+
+            if (friendUids.isEmpty()) {
+                mergeAndPublish()
+                return
+            }
+
+            // whereIn tops out at 30 values -- fine for now, revisit if
+            // accounts end up with huge friend lists.
+            friendSongsListener = attach(
+                db.collection("songs")
+                    .whereIn("ownerId", friendUids.take(30))
+                    .whereEqualTo("friendsOnly", true),
+                friendSongs
+            )
+        }
+
+        friendsListener = db.collection("users").document(uid)
+            .collection("friends")
+            .addSnapshotListener { snapshot, error ->
+                if (generation != songsGeneration) return@addSnapshotListener
+                if (error == null) {
+                    friendUids.clear()
+                    friendUids.addAll(snapshot?.documents.orEmpty().map { it.id })
+                    attachFriendSongs()
+                }
+            }
+
         publicSongsListener = attach(
             db.collection("songs").whereEqualTo("published", true),
             publicSongs
@@ -154,7 +196,7 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
         db.collection("usernames")
             .orderBy(FieldPath.documentId())
             .startAt(lowerQuery)
-            .endAt(lowerQuery + "")
+            .endAt(lowerQuery + "\uf8ff")
             .limit(20)
             .get()
             .addOnSuccessListener usernamesLoaded@{ snapshot ->
@@ -289,7 +331,9 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
         publicSongsListener?.remove()
         ownSongsListener?.remove()
         sharedSongsListener?.remove()
+        friendSongsListener?.remove()
         blockedUsersListener?.remove()
+        friendsListener?.remove()
         super.onCleared()
     }
 }

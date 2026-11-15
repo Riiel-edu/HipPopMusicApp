@@ -41,6 +41,7 @@ import com.google.firebase.firestore.MetadataChanges
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.outlined.Email
+import com.example.csc490seniorproject.moderation.Moderation.Companion.ModerationGate
 
 class MainActivity : ComponentActivity() {
     private val auth by lazy { FirebaseAuth.getInstance() }
@@ -110,66 +111,72 @@ class MainActivity : ComponentActivity() {
                     )
                 )
 
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    topBar = {
-                        if (showNavigationBars) {
-                            TopBar(navHostController)
-                        }
-                    },
-                    bottomBar = {
-                        if (showNavigationBars) {
-                            NavigationBar {
-                                navItemsList.forEach { item ->
-                                    val isSelected =
-                                        currentDestination?.hierarchy?.any {
-                                            it.route == item.route
-                                        } == true
+                ModerationGate(
+                    lifecycle = this@MainActivity.lifecycle,
+                    bypass = currentRoute == "RegisterScreen"
+                ) {
 
-                                    NavigationBarItem(
-                                        selected = isSelected,
-                                        onClick = {
-                                            navHostController.navigate(item.route) {
-                                                launchSingleTop = true
-                                                restoreState = true
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
+                        topBar = {
+                            if (showNavigationBars) {
+                                TopBar(navHostController)
+                            }
+                        },
+                        bottomBar = {
+                            if (showNavigationBars) {
+                                NavigationBar {
+                                    navItemsList.forEach { item ->
+                                        val isSelected =
+                                            currentDestination?.hierarchy?.any {
+                                                it.route == item.route
+                                            } == true
 
-                                                popUpTo(
-                                                    navHostController.graph
-                                                        .findStartDestination().id
-                                                ) {
-                                                    saveState = true
+                                        NavigationBarItem(
+                                            selected = isSelected,
+                                            onClick = {
+                                                navHostController.navigate(item.route) {
+                                                    launchSingleTop = true
+                                                    restoreState = true
+
+                                                    popUpTo(
+                                                        navHostController.graph
+                                                            .findStartDestination().id
+                                                    ) {
+                                                        saveState = true
+                                                    }
                                                 }
-                                            }
-                                            if (item.route == "ProfileScreen") {
-                                                navHostController.popBackStack(
-                                                    route = "ProfileScreen",
-                                                    inclusive = false
+                                                if (item.route == "ProfileScreen") {
+                                                    navHostController.popBackStack(
+                                                        route = "ProfileScreen",
+                                                        inclusive = false
+                                                    )
+                                                }
+                                            },
+                                            label = {
+                                                Text(item.title)
+                                            },
+                                            icon = {
+                                                Icon(
+                                                    imageVector = if (isSelected) {
+                                                        item.iconSelected
+                                                    } else {
+                                                        item.iconUnselected
+                                                    },
+                                                    contentDescription = item.title
                                                 )
                                             }
-                                        },
-                                        label = {
-                                            Text(item.title)
-                                        },
-                                        icon = {
-                                            Icon(
-                                                imageVector = if (isSelected) {
-                                                    item.iconSelected
-                                                } else {
-                                                    item.iconUnselected
-                                                },
-                                                contentDescription = item.title
-                                            )
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
                             }
                         }
+                    ) { innerPadding ->
+                        Nav(
+                            navController = navHostController,
+                            modifier = Modifier.padding(innerPadding)
+                        )
                     }
-                ) { innerPadding ->
-                    Nav(
-                        navController = navHostController,
-                        modifier = Modifier.padding(innerPadding)
-                    )
                 }
             }
         }
