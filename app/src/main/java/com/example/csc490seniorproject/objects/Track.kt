@@ -7,5 +7,6 @@ data class Track(
     val volume: Float = 0.8f,
     val muted: Boolean = false,
     val solo: Boolean = false,
-    val notes: List<Note> = emptyList()
+    val notes: List<Note> = emptyList(),
+    val ownerId: String = ""
 )
