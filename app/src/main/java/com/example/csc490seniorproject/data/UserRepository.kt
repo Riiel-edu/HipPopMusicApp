@@ -5,19 +5,21 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 
 data class UserProfile(
-val username: String ="",
-val email: String = "",
-val bio: String ="",
-val profilePhotoURL: String ="",
-val createdAt: Long = System.currentTimeMillis(),
-val followerCount: Int =0,
-val followingCount: Int=0
-
+    val username: String = "",
+    val email: String = "",
+    val bio: String = "",
+    val profilePhotoURL: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    val followerCount: Int = 0,
+    val followingCount: Int = 0,
+    val ageGroup: String = ""
 )
 
 fun registerUserProfile(
     firebaseUser: FirebaseUser,
     username: String,
+    ageGroup: String,
+    birthDate: String,
     onSuccess: () -> Unit,
     onUsernameTaken: () -> Unit,
     onFailure: (Exception) -> Unit
@@ -26,10 +28,12 @@ fun registerUserProfile(
     val usernameKey = username.lowercase()
     val usernameRef = db.collection("usernames").document(usernameKey)
     val userRef = db.collection("users").document(firebaseUser.uid)
+    val privateRef = userRef.collection("private").document("profile")
 
     val profile = UserProfile(
         username = username,
-        email = firebaseUser.email ?: ""
+        email = firebaseUser.email ?: "",
+        ageGroup = ageGroup
     )
 
     db.runTransaction { transaction ->
@@ -40,8 +44,9 @@ fun registerUserProfile(
                 FirebaseFirestoreException.Code.ALREADY_EXISTS
             )
         }
-        transaction.set(usernameRef, mapOf("uid" to firebaseUser.uid))
+        transaction.set(usernameRef, mapOf("uid" to firebaseUser.uid, "ageGroup" to ageGroup))
         transaction.set(userRef, profile)
+        transaction.set(privateRef, mapOf("birthDate" to birthDate))   // new
         null
     }.addOnSuccessListener {
         onSuccess()

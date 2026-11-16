@@ -15,7 +15,8 @@ class User (
     @ColumnInfo var email: String,
     @ColumnInfo val genre: List<String> = emptyList(),
     @ColumnInfo var songs: List<Song>,
-    @ColumnInfo var friends: List<User>
+    @ColumnInfo var friends: List<User>,
+    val ageGroup: String = ""
 
     ){
 }

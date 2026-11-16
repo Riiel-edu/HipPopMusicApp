@@ -18,6 +18,7 @@ import com.google.firebase.firestore.Query
 
 class SearchScreenVM(application: Application) : AndroidViewModel(application) {
     val songsList = mutableStateListOf<Song>()
+     var myAgeGroup = "adult"
     val userResults = mutableStateListOf<User>()
 
 
@@ -80,6 +81,7 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
         userResults.clear()
         friendStatuses.clear()
         blockedByMe.clear()
+        myAgeGroup = "adult"
         songsError = null
         searchGeneration++
 
@@ -87,6 +89,9 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
         if (uid == null) {
             songsError = "Please log in to see songs."
             return@AuthStateListener
+        }
+        db.collection("usernames").document(uid).get().addOnSuccessListener {
+            if (generation == songsGeneration) myAgeGroup = it.getString("ageGroup") ?: ""
         }
 
         blockedUsersListener = db.collection("users").document(uid)
@@ -193,6 +198,8 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
         userResults.clear()
         if (lowerQuery.isEmpty() || myUid == null) return
 
+        val myGroup = "adult"   // hardcoded for testing
+
         db.collection("usernames")
             .orderBy(FieldPath.documentId())
             .startAt(lowerQuery)
@@ -200,27 +207,28 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
             .limit(20)
             .get()
             .addOnSuccessListener usernamesLoaded@{ snapshot ->
-                if (thisGeneration != searchGeneration) {
-                    return@usernamesLoaded
-                }
+                if (thisGeneration != searchGeneration) return@usernamesLoaded
+
+                println("SEARCH: query='$lowerQuery' returned ${snapshot.size()} docs")
 
                 for (doc in snapshot.documents) {
                     val uid = doc.getString("uid") ?: continue
+                    println("SEARCH: ${doc.id} uid=$uid theirs='${doc.getString("ageGroup")}' mine='$myGroup'")
+
                     if (uid == myUid || userResults.any { it.uid == uid }) continue
                     if (uid in blockedByMe) continue
+                    if (doc.getString("ageGroup") != myGroup) continue   // same group only
+                    println("SEARCH: passed age check: ${doc.id}")
 
                     val username = doc.getString("username") ?: doc.id
                     val privacy = doc.getBoolean("privacy") ?: false
                     val email = doc.getString("email") ?: ""
 
-                    // Reverse direction: did this candidate block ME? Only
-                    // added to results once we know they haven't -- fails
-                    // closed (stays out of results) on a read error rather
-                    // than risk a blocked account resurfacing in search.
                     db.collection("users").document(uid)
                         .collection("blockedUsers").document(myUid)
                         .get()
                         .addOnSuccessListener blockCheck@{ blockDoc ->
+                            println("SEARCH: blockCheck ${doc.id} exists=${blockDoc.exists()}")
                             if (thisGeneration != searchGeneration) return@blockCheck
                             if (blockDoc.exists()) return@blockCheck
                             if (userResults.any { it.uid == uid }) return@blockCheck
@@ -238,8 +246,10 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
                                     friends = arrayListOf()
                                 )
                             )
+                            println("SEARCH: added ${doc.id} to userResults")
                             refreshFriendStatus(myUid, uid, thisGeneration)
                         }
+                        .addOnFailureListener { println("SEARCH: blockCheck failed for ${doc.id}: $it") }
                 }
             }
             .addOnFailureListener { error ->
