@@ -99,16 +99,28 @@
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxWidth().padding(5.dp)) {
 
-                Text("My Songs", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
-                    fontFamily = fredoka, fontSize = 28.sp, color = Color(0xFF5d36eb))
+                Text(
+                    "My Songs", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+                    fontFamily = fredoka, fontSize = 28.sp, color = Color(0xFF5d36eb)
+                )
 
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
+                error?.let {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(5.dp))
 
                 if (songs.isEmpty()) {
-                    Text("No songs yet. Tap + to create one.", fontFamily = fredoka,
-                        modifier = Modifier.fillMaxWidth().padding(24.dp), textAlign = TextAlign.Center)
+                    Text(
+                        "No songs yet. Tap + to create one.",
+                        fontFamily = fredoka,
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        textAlign = TextAlign.Center
+                    )
                 }
 
                 LazyColumn(
@@ -139,7 +151,8 @@
                                             painter = painterResource(id = R.drawable.default_pfp),
                                             contentScale = ContentScale.Crop,
                                             contentDescription = null,
-                                            modifier = Modifier.size(90.dp).clip(RoundedCornerShape(8.dp))
+                                            modifier = Modifier.size(90.dp)
+                                                .clip(RoundedCornerShape(8.dp))
                                         )
                                     }
                                     Column(
@@ -161,83 +174,141 @@
                                                 modifier = Modifier.weight(1f)
                                             )
 
-                                        Box(modifier = Modifier.wrapContentSize()) {
-                                            IconButton(onClick = { expanded = true }) {
-                                                Icon(Icons.Default.MoreVert, contentDescription = "Show menu")
+                                            Box(modifier = Modifier.wrapContentSize()) {
+                                                IconButton(onClick = { expanded = true }) {
+                                                    Icon(
+                                                        Icons.Default.MoreVert,
+                                                        contentDescription = "Show menu"
+                                                    )
+                                                }
+                                                DropdownMenu(
+                                                    expanded = expanded,
+                                                    onDismissRequest = { expanded = false }) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("Edit Song Details") },
+                                                        onClick = {
+                                                            expanded = false; editing = currentItem
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text(if (currentItem.published) "Unpublish Song" else "Publish Song") },
+                                                        onClick = {
+                                                            expanded =
+                                                                false; viewModel.togglePublish(
+                                                            currentItem
+                                                        )
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = {
+                                                            Text(
+                                                                if (currentItem.friendsOnly) "Remove Friends-Only" else "Make Friends-Only"
+                                                            )
+                                                        },
+                                                        enabled = !currentItem.published,
+                                                        onClick = {
+                                                            expanded =
+                                                                false; viewModel.toggleFriendsOnly(
+                                                            currentItem
+                                                        )
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("Delete Song") },
+                                                        onClick = {
+                                                            expanded = false; viewModel.delete(
+                                                            currentItem.id
+                                                        )
+                                                        }
+                                                    )
+                                                }
                                             }
-                                            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                                                DropdownMenuItem(
-                                                    text = { Text("Edit Song Details") },
-                                                    onClick = { expanded = false; editing = currentItem }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text(if (currentItem.published) "Unpublish Song" else "Publish Song") },
-                                                    onClick = { expanded = false; viewModel.togglePublish(currentItem) }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = {
-                                                        Text(
-                                                            if (currentItem.friendsOnly) "Remove Friends-Only" else "Make Friends-Only"
+
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                shadowElevation = 4.dp,
+                                                color = Color.White,
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                // Song has no description field, so this shows genre + status instead
+                                                Text(
+                                                    buildString {
+                                                        append(
+                                                            if (currentItem.genre.isEmpty()) "No genre" else currentItem.genre.joinToString(
+                                                                ", "
+                                                            )
+                                                        )
+                                                        append(
+                                                            when {
+                                                                currentItem.published -> " • Published"
+                                                                currentItem.friendsOnly -> " • Friends only"
+                                                                else -> " • Private"
+                                                            }
                                                         )
                                                     },
-                                                    enabled = !currentItem.published,
-                                                    onClick = { expanded = false; viewModel.toggleFriendsOnly(currentItem) }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("Delete Song") },
-                                                    onClick = { expanded = false; viewModel.delete(currentItem.id) }
+                                                    fontFamily = fredoka,
+                                                    fontSize = 13.sp,
+                                                    color = Color(0xFF444444),
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.padding(8.dp)
                                                 )
                                             }
                                         }
 
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        shadowElevation = 4.dp,
-                                        color = Color.White,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        // Song has no description field, so this shows genre + status instead
-                                        Text(
-                                            buildString {
-                                                append(if (currentItem.genre.isEmpty()) "No genre" else currentItem.genre.joinToString(", "))
-                                                append(
-                                                    when {
-                                                        currentItem.published -> " • Published"
-                                                        currentItem.friendsOnly -> " • Friends only"
-                                                        else -> " • Private"
-                                                    }
-                                                )
-                                            },
-                                            fontFamily = fredoka,
-                                            fontSize = 13.sp,
-                                            color = Color(0xFF444444),
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.padding(8.dp)
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        val buttonColors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFF5d36eb),
+                                            contentColor = Color.White
                                         )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                val buttonColors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF5d36eb), contentColor = Color.White
-                                )
-                                Column {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                                        Button(onClick = { navController.navigate("GameScreen/${currentItem.id}") },
-                                            colors = buttonColors, modifier = Modifier.weight(1f)) {
-                                            Text("▶ Play", fontFamily = fredoka, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        }
-                                        Button(onClick = { navController.navigate("EditorScreen/${currentItem.id}") },
-                                            colors = buttonColors, modifier = Modifier.weight(1f)) {
-                                            Text("Edit Song", fontFamily = fredoka, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        }
-                                    }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                                        Button(onClick = { navController.navigate("BeatmapEditorScreen/${currentItem.id}") },
-                                            colors = buttonColors, modifier = Modifier.weight(1f)) {
-                                            Text("Edit Beatmap", fontFamily = fredoka, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Column {
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Button(
+                                                    onClick = { navController.navigate("GameScreen/${currentItem.id}") },
+                                                    colors = buttonColors,
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text(
+                                                        "▶ Play",
+                                                        fontFamily = fredoka,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                                Button(
+                                                    onClick = { navController.navigate("EditorScreen/${currentItem.id}") },
+                                                    colors = buttonColors,
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text(
+                                                        "Edit Song",
+                                                        fontFamily = fredoka,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Button(
+                                                    onClick = { navController.navigate("BeatmapEditorScreen/${currentItem.id}") },
+                                                    colors = buttonColors,
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text(
+                                                        "Edit Beatmap",
+                                                        fontFamily = fredoka,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }

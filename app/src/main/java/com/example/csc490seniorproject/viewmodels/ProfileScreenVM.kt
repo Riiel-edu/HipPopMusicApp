@@ -586,6 +586,7 @@ enum class FriendStatus { NONE, REQUEST_SENT, REQUEST_RECEIVED, FRIENDS }
             }
     }
 
+
     fun unblockUser(myUid: String, targetUid: String, onDone: () -> Unit = {}) {
         db.collection("users").document(myUid)
             .collection("blockedUsers").document(targetUid)
@@ -625,4 +626,16 @@ enum class FriendStatus { NONE, REQUEST_SENT, REQUEST_RECEIVED, FRIENDS }
                 println("FIREBASE: loadBlockedUsers failed: $e")
             }
     }
+     fun unfriend(myUid: String, targetUid: String) {
+         val batch = db.batch()
+         batch.delete(db.collection("users").document(myUid).collection("friends").document(targetUid))
+         batch.delete(db.collection("users").document(targetUid).collection("friends").document(myUid))
+
+         batch.commit()
+             .addOnSuccessListener {
+                 friendStatus = FriendStatus.NONE
+                 friendsList.removeAll { it.uid == targetUid }
+             }
+             .addOnFailureListener { e -> println("FIREBASE: unfriend failed: $e") }
+     }
 }

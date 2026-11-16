@@ -532,7 +532,7 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                                                             text = { Text("Unfriend") },
                                                             onClick = {
                                                                 profileMenuExpanded = false
-                                                                // TODO: Teammate adds functionality.
+                                                                viewModel.unfriend(myUid, targetUid)
                                                             }
                                                         )
                                                     }
