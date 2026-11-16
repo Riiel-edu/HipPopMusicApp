@@ -47,9 +47,9 @@ class MySongsVM : ViewModel() {
             _error.value = "Couldn't create song: ${e.message}"
         }
     }
+
     fun createSongFromTemplate(templateId: String, onCreated: (String) -> Unit) =
         viewModelScope.launch {
-
             val uid = FirebaseAuth.getInstance().currentUser?.uid
             if (uid == null) {
                 _error.value = "Not signed in"
@@ -59,7 +59,7 @@ class MySongsVM : ViewModel() {
             try {
                 val db = FirebaseFirestore.getInstance()
 
-                // Get the selected template document
+                // Get the selected template
                 val templateSnapshot = db.collection("templates")
                     .document(templateId)
                     .get()
@@ -68,16 +68,29 @@ class MySongsVM : ViewModel() {
                 val templateData = templateSnapshot.data?.toMutableMap()
                     ?: throw Exception("Template not found")
 
-                // Only replace these two fields
+                // Set ownership and creation time
                 templateData["ownerId"] = uid
                 templateData["createdAt"] = FieldValue.serverTimestamp()
 
                 // Create a new song document
                 val newSongRef = db.collection("songs").document()
-
                 newSongRef.set(templateData).await()
 
-                println("FIREBASE: Template copied to song ${newSongRef.id}")
+                // Create an empty beatmap using the template's song settings
+                val emptyBeatmap = Beatmap(
+                    songId = newSongRef.id,
+                    ownerId = uid,
+                    title = templateData["name"] as? String ?: "Untitled Song",
+                    bpm = (templateData["bpm"] as? Number)?.toInt() ?: 120,
+                    stepsPerBeat = (templateData["stepsPerBeat"] as? Number)?.toInt() ?: 4,
+                    beatsPerBar = (templateData["beatsPerBar"] as? Number)?.toInt() ?: 4,
+                    bars = (templateData["bars"] as? Number)?.toInt() ?: 4
+                )
+
+                // Save the empty beatmap
+                SongRepository.saveBeatmap(newSongRef.id, uid, emptyBeatmap)
+
+                println("FIREBASE: Template copied with empty beatmap: ${newSongRef.id}")
 
                 refresh()
                 onCreated(newSongRef.id)
@@ -87,6 +100,7 @@ class MySongsVM : ViewModel() {
                 println("FIREBASE: Template copy failed: ${e.message}")
             }
         }
+
     fun getTemplates(onLoaded: (List<Pair<String, String>>) -> Unit) =
         viewModelScope.launch {
             try {
