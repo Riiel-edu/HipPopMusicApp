@@ -17,11 +17,16 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,8 +41,15 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.csc490seniorproject.data.AgeGate
 import com.google.firebase.auth.FirebaseAuth
 import com.example.csc490seniorproject.data.registerUserProfile
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+
+@OptIn(ExperimentalMaterial3Api::class)
 
 @Composable
 fun RegisterScreen ( onRegistrationSuccess: (String) -> Unit, onLoginClick: () -> Unit) {
@@ -49,6 +61,8 @@ fun RegisterScreen ( onRegistrationSuccess: (String) -> Unit, onLoginClick: () -
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
+    var birthDate by remember { mutableStateOf<LocalDate?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
 
     val purple = Color(0xFF6737F5)
     val lightPurple = Color(0xFFE9E2FF)
@@ -173,10 +187,39 @@ fun RegisterScreen ( onRegistrationSuccess: (String) -> Unit, onLoginClick: () -
             Text(text = errorMessage, color = Color.Red, fontSize = 14.sp)
         }
 
+        Spacer(modifier = Modifier.height(14.dp))
+
+        OutlinedButton(
+            onClick = { showDatePicker = true },
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Text(birthDate?.format(DateTimeFormatter.ofPattern("MMM d, yyyy")) ?: "Date of birth")
+        }
+
+        if (showDatePicker) {
+            val pickerState = rememberDatePickerState(yearRange = 1900..LocalDate.now().year)
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        pickerState.selectedDateMillis?.let {
+                            birthDate = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
+                            errorMessage = ""
+                        }
+                        showDatePicker = false
+                    }) { Text("OK") }
+                },
+                dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
+            ) { DatePicker(state = pickerState) }
+        }
+
         Spacer(modifier = Modifier.height(20.dp))
 
         Button(
             onClick = {
+                val birth = birthDate
+
                 when {
                     username.isBlank() || email.isBlank() || password.isBlank() || confirmPassword.isBlank() -> {
                         errorMessage = "Please complete every field."
@@ -194,7 +237,16 @@ fun RegisterScreen ( onRegistrationSuccess: (String) -> Unit, onLoginClick: () -
                         errorMessage = "Passwords do not match."
                     }
 
+                    birth == null -> {
+                        errorMessage = "Please enter your date of birth."
+                    }
+
+                    AgeGate.ageOf(birth) < AgeGate.MIN_AGE -> {
+                        errorMessage = "Sorry, you must be 13 or older to use this app."
+                    }
+
                     else -> {
+                        val ageGroup = AgeGate.groupFor(AgeGate.ageOf(birth))
                         FirebaseAuth.getInstance()
                             .createUserWithEmailAndPassword(email, password)
                             .addOnSuccessListener { authResult ->
@@ -202,6 +254,8 @@ fun RegisterScreen ( onRegistrationSuccess: (String) -> Unit, onLoginClick: () -
                                 registerUserProfile(
                                     firebaseUser = user,
                                     username = username,
+                                    ageGroup = ageGroup,
+                                    birthDate = birth.toString(),
                                     onSuccess = { onRegistrationSuccess(username) },
                                     onUsernameTaken = {
                                         errorMessage = "That username is already taken. Please choose another."
