@@ -53,7 +53,7 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun RegisterScreen ( onRegistrationSuccess: (String) -> Unit, onLoginClick: () -> Unit) {
-
+    //
     var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -66,7 +66,7 @@ fun RegisterScreen ( onRegistrationSuccess: (String) -> Unit, onLoginClick: () -
 
     val purple = Color(0xFF6737F5)
     val lightPurple = Color(0xFFE9E2FF)
-
+    
     Column(
         modifier = Modifier
             .fillMaxSize()
