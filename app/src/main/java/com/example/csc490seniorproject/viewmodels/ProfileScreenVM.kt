@@ -16,6 +16,7 @@ import kotlin.collections.set
 import kotlin.text.get
 import android.net.Uri
 import com.google.firebase.storage.FirebaseStorage
+private var profileDetailsGeneration = 0
 enum class FriendStatus { NONE, REQUEST_SENT, REQUEST_RECEIVED, FRIENDS }
 
  class ProfileScreenVM(application: Application) : AndroidViewModel(application) {
@@ -396,81 +397,91 @@ enum class FriendStatus { NONE, REQUEST_SENT, REQUEST_RECEIVED, FRIENDS }
     }
 
 
-    fun getProfileDetails(myUid: String, onLoaded: () -> Unit = {}) {
-        println("PROFILE: getProfileDetails() called")
-        println("PROFILE: myUid = $myUid")
+     fun getProfileDetails(myUid: String, onLoaded: () -> Unit = {}) {
+         profileDetailsGeneration++
+         val generation = profileDetailsGeneration
 
-        db.collection("users").document(myUid).get()
-            .addOnSuccessListener { document ->
-                println("FIREBASE: User document retrieved successfully")
-                println("FIREBASE: Document exists = ${document.exists()}")
+         println("PROFILE: getProfileDetails() called")
+         println("PROFILE: myUid = $myUid")
 
-                if (document.exists()) {
-                    val displayName = document.getString("displayName")
-                    val username = document.getString("username") ?: ""
+         db.collection("users").document(myUid).get()
+             .addOnSuccessListener { document ->
+                 if (generation != profileDetailsGeneration) return@addOnSuccessListener
 
-                    println("PROFILE: Firestore displayName = $displayName")
-                    println("PROFILE: Firestore username = $username")
+                 println("FIREBASE: User document retrieved successfully")
+                 println("FIREBASE: Document exists = ${document.exists()}")
 
-                    profileUsername = if (displayName.isNullOrBlank()) {
-                        username
-                    } else {
-                        displayName
-                    }
+                 if (document.exists()) {
+                     val displayName = document.getString("displayName")
+                     val username = document.getString("username") ?: ""
 
-                    aboutMe = document.getString("aboutMe") ?: ""
+                     println("PROFILE: Firestore displayName = $displayName")
+                     println("PROFILE: Firestore username = $username")
 
-                    println("PROFILE: Loading profile picture from Storage")
+                     profileUsername = if (displayName.isNullOrBlank()) {
+                         username
+                     } else {
+                         displayName
+                     }
 
-                    val storageRef = FirebaseStorage.getInstance()
-                        .reference
-                        .child("profilePictures/$myUid.jpg")
+                     aboutMe = document.getString("aboutMe") ?: ""
 
-                    storageRef.downloadUrl
-                        .addOnSuccessListener { downloadUri ->
-                            profilePictureUrl = downloadUri.toString()
-                            println("PROFILE: Storage picture URL = $profilePictureUrl")
-                        }
-                        .addOnFailureListener { e ->
-                            println("PROFILE: Failed to get profile picture from Storage: ${e.message}")
-                            profilePictureUrl = ""
-                        }
-                        .addOnCompleteListener {
-                            val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+                     println("PROFILE: Loading profile picture from Storage")
 
-                            if (displayName.isNullOrBlank() && auth.currentUser?.uid == myUid) {
-                                println("FIREBASE: displayName is blank; updating it")
+                     val storageRef = FirebaseStorage.getInstance()
+                         .reference
+                         .child("profilePictures/$myUid.jpg")
 
-                                db.collection("users").document(myUid)
-                                    .set(
-                                        mapOf("displayName" to username),
-                                        com.google.firebase.firestore.SetOptions.merge()
-                                    )
-                                    .addOnSuccessListener {
-                                        println("FIREBASE: Created displayName = $username")
-                                        onLoaded()
-                                    }
-                                    .addOnFailureListener { e ->
-                                        println("FIREBASE: Failed to create displayName: ${e.message}")
-                                        e.printStackTrace()
-                                        onLoaded()
-                                    }
-                            } else {
-                                println("FIREBASE: Loaded displayName = $displayName")
-                                onLoaded()
-                            }
-                        }
-                } else {
-                    println("FIREBASE: User document does not exist for UID = $myUid")
-                    onLoaded()
-                }
-            }
-            .addOnFailureListener { e ->
-                println("FIREBASE: Failed to get profile details: ${e.message}")
-                e.printStackTrace()
-                onLoaded()
-            }
-    }
+                     storageRef.downloadUrl
+                         .addOnSuccessListener { downloadUri ->
+                             if (generation != profileDetailsGeneration) return@addOnSuccessListener
+                             profilePictureUrl = downloadUri.toString()
+                             println("PROFILE: Storage picture URL = $profilePictureUrl")
+                         }
+                         .addOnFailureListener { e ->
+                             if (generation != profileDetailsGeneration) return@addOnFailureListener
+                             println("PROFILE: Failed to get profile picture from Storage: ${e.message}")
+                             profilePictureUrl = ""
+                         }
+                         .addOnCompleteListener {
+                             if (generation != profileDetailsGeneration) return@addOnCompleteListener
+
+                             val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+
+                             if (displayName.isNullOrBlank() && auth.currentUser?.uid == myUid) {
+                                 println("FIREBASE: displayName is blank; updating it")
+
+                                 db.collection("users").document(myUid)
+                                     .set(
+                                         mapOf("displayName" to username),
+                                         com.google.firebase.firestore.SetOptions.merge()
+                                     )
+                                     .addOnSuccessListener {
+                                         println("FIREBASE: Created displayName = $username")
+                                         onLoaded()
+                                     }
+                                     .addOnFailureListener { e ->
+                                         println("FIREBASE: Failed to create displayName: ${e.message}")
+                                         e.printStackTrace()
+                                         onLoaded()
+                                     }
+                             } else {
+                                 println("FIREBASE: Loaded displayName = $displayName")
+                                 onLoaded()
+                             }
+                         }
+                 } else {
+                     println("FIREBASE: User document does not exist for UID = $myUid")
+                     onLoaded()
+                 }
+             }
+             .addOnFailureListener { e ->
+                 if (generation != profileDetailsGeneration) return@addOnFailureListener
+                 println("FIREBASE: Failed to get profile details: ${e.message}")
+                 e.printStackTrace()
+                 onLoaded()
+             }
+     }
 
     fun uploadProfilePicture(uid: String, imageUri: Uri) {
         println("PROFILE: Starting image upload")
