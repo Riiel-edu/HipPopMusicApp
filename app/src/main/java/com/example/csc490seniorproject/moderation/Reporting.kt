@@ -2,14 +2,17 @@ package com.example.csc490seniorproject.moderation
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.*
 import java.util.UUID
+import androidx.compose.ui.text.font.FontWeight
 
 class Reporting {
     companion object {
@@ -21,6 +24,7 @@ class Reporting {
             targetUid: String,
             targetName: String,
             reason: String,
+            evidence: String,
             onDone: (String?) -> Unit
         ) {
             val reporterUid =
@@ -74,6 +78,7 @@ class Reporting {
                         "targetUid" to targetUid,
                         "caseId" to caseId,
                         "reason" to reason.trim(),
+                        "evidence" to evidence.trim(),
                         "createdAt" to FieldValue.serverTimestamp()
                     )
                 )
@@ -134,6 +139,10 @@ class Reporting {
                     mutableStateOf("")
                 }
 
+                var evidence by remember {
+                    mutableStateOf("")
+                }
+
                 var busy by remember {
                     mutableStateOf(false)
                 }
@@ -180,7 +189,26 @@ class Reporting {
                                         reason = it
                                     },
                                     label = {
-                                        Text("Reason and evidence")
+                                        Text("Reason for report")
+                                    },
+                                    placeholder = {
+                                        Text("Why are you reporting this user?")
+                                    },
+                                    minLines = 2,
+                                    enabled = !busy,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                OutlinedTextField(
+                                    value = evidence,
+                                    onValueChange = {
+                                        evidence = it
+                                    },
+                                    label = {
+                                        Text("Evidence (optional)")
+                                    },
+                                    placeholder = {
+                                        Text("Describe what happened or provide supporting details...")
                                     },
                                     minLines = 3,
                                     enabled = !busy,
@@ -188,8 +216,7 @@ class Reporting {
                                 )
 
                                 Text(
-                                    "10–1,000 characters. " +
-                                            "One report per account per case."
+                                    "Reason: 10–100 characters. Evidence: up to 2,000 characters."
                                 )
 
                                 message?.let {
@@ -200,7 +227,8 @@ class Reporting {
                         confirmButton = {
                             TextButton(
                                 enabled = !busy &&
-                                        reason.trim().length in 10..1000,
+                                        reason.trim().length in 10..100 &&
+                                        evidence.length <= 1000,
                                 onClick = {
                                     busy = true
 
@@ -208,6 +236,7 @@ class Reporting {
                                         targetUid = targetUid,
                                         targetName = targetUsername,
                                         reason = reason,
+                                        evidence = evidence,
                                         onDone = { failure ->
                                             busy = false
 
@@ -216,6 +245,7 @@ class Reporting {
 
                                             if (failure == null) {
                                                 reason = ""
+                                                evidence = ""
                                             }
                                         }
                                     )
@@ -692,14 +722,68 @@ class Reporting {
                     reports.forEach { report ->
                         HorizontalDivider()
 
-                        Text(
-                            text = "Reporter: ${report.id}",
-                            style = MaterialTheme.typography.labelMedium
-                        )
+                        Surface(
+                            color = Color(0xFFBFB1FA),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = "Reporter: ${report.id}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White
+                                )
 
-                        Text(
-                            report.getString("reason").orEmpty()
-                        )
+                                // Reason
+                                Surface(
+                                    color = Color.White,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp)
+                                    ) {
+                                        Text(
+                                            "Reason",
+                                            color = Color(0xFF5D36EB),
+                                            fontWeight = FontWeight.Bold
+                                        )
+
+                                        Text(
+                                            report.getString("reason").orEmpty(),
+                                            color = Color(0xFF444444)
+                                        )
+                                    }
+                                }
+
+                                // Evidence
+                                Surface(
+                                    color = Color.White,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp)
+                                    ) {
+                                        Text(
+                                            "Evidence",
+                                            color = Color(0xFF5D36EB),
+                                            fontWeight = FontWeight.Bold
+                                        )
+
+                                        Text(
+                                            report.getString("evidence")
+                                                ?.ifBlank { "No evidence provided." }
+                                                ?: "No evidence provided.",
+                                            color = Color(0xFF444444)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     if (!detailsLoaded) {
@@ -728,7 +812,7 @@ class Reporting {
                                     detailsLoaded &&
                                     reports.size >= 4 &&
                                     count < 4 &&
-                                    reason.trim().length in 10..1000,
+                                    reason.trim().length in 10..100,
                         onClick = {
                             confirmedCount = count
                             decisionDialog = true
@@ -748,7 +832,7 @@ class Reporting {
                             !busy &&
                                     detailsLoaded &&
                                     reports.size >= 4 &&
-                                    reason.trim().length in 10..1000,
+                                    reason.trim().length in 10..100,
                         onClick = {
                             confirmedCount = count
                             decisionDialog = false

@@ -4,17 +4,35 @@ import com.example.csc490seniorproject.objects.Beatmap
 import com.example.csc490seniorproject.objects.Song
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.firestore
 import com.google.firebase.firestore.toObject
 import com.google.firebase.firestore.toObjects
 import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 object SongRepository {
     private val db = Firebase.firestore
     private val songs = db.collection("songs")
+
     private val beatmaps = db.collection("beatmaps")
 
     // ---------- Songs ----------
+
+    suspend fun publishedSongs(): List<Song> =
+        songs.whereEqualTo("published", true)
+            .get()
+            .await()
+            .toObjects<Song>()
+
+    suspend fun friendsOnlySongs(friendId: String): List<Song> =
+        songs.whereEqualTo("ownerId", friendId)
+            .whereEqualTo("friendsOnly", true)
+            .get()
+            .await()
+            .toObjects<Song>()
 
     suspend fun saveSong(song: Song) {
         songs.document(song.id).set(song.copy(updatedAt = null)).await()
@@ -32,6 +50,50 @@ object SongRepository {
             batch.delete(beatmaps.document(songId))
             batch.delete(songs.document(songId))
         }.await()
+    }
+
+    suspend fun getSongRating(songId: String): Double {
+        val snapshot = songs.document(songId)
+            .collection("ratings")
+            .get()
+            .await()
+
+        val ratings = snapshot.documents.mapNotNull { doc ->
+            doc.getLong("rating")
+                ?.toInt()
+                ?.takeIf { it in 1..5 }
+        }
+
+        return if (ratings.isNotEmpty()) {
+            ratings.average()
+        } else {
+            0.0
+        }
+    }
+
+    private fun getTodayDate(): String {
+        return SimpleDateFormat(
+            "yyyy-MM-dd",
+            Locale.US
+        ).format(Date())
+    }
+
+    suspend fun recordSongView(songId: String) {
+        if (songId.isBlank()) return
+
+        val today = getTodayDate()
+
+        db.collection("dailySongViews")
+            .document("${today}_$songId")
+            .set(
+                mapOf(
+                    "songId" to songId,
+                    "date" to today,
+                    "views" to FieldValue.increment(1)
+                ),
+                SetOptions.merge()
+            )
+            .await()
     }
 
     // ---------- Beatmap (document ID = song ID) ----------

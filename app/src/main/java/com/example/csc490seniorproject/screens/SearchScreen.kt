@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,11 +58,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.csc490seniorproject.R
+import com.example.csc490seniorproject.data.SongRepository
 import com.example.csc490seniorproject.objects.User
 import com.example.csc490seniorproject.viewmodels.FriendStatus
 import com.example.csc490seniorproject.viewmodels.SearchScreenVM
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.floor
 
@@ -76,6 +79,8 @@ fun SearchScreen(
     viewModel: SearchScreenVM,
     navController: NavController
 ) {
+
+    val scope = rememberCoroutineScope()
     val purple = Color(0xFF5D36EB)
     val cardPurple = Color(0xFFBFB1FA)
     val fredoka = FontFamily(Font(R.font.fredoka_medium, FontWeight.Normal))
@@ -538,6 +543,18 @@ fun SearchScreen(
                             ) {
                                 Button(
                                     onClick = {
+                                        scope.launch {
+                                            try {
+                                                SongRepository.recordSongView(song.id)
+                                            } catch (e: Exception) {
+                                                android.util.Log.e(
+                                                    "SongViews",
+                                                    "Failed to record song view",
+                                                    e
+                                                )
+                                            }
+                                        }
+
                                         navController.navigate("GameScreen/${song.id}")
                                     },
                                     colors = ButtonDefaults.buttonColors(
