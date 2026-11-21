@@ -20,6 +20,7 @@ data class Song(
     @ColumnInfo val beatsPerBar: Int = 4,
     @ColumnInfo val bars: Int = 64,
     @ColumnInfo val tracks: List<Track> = emptyList(),
+    @ColumnInfo val description: String = "No description provided",
     @ServerTimestamp val createdAt: Date? = null,
-    @ServerTimestamp val updatedAt: Date? = null
+    @ServerTimestamp val updatedAt: Date? = null,
 )

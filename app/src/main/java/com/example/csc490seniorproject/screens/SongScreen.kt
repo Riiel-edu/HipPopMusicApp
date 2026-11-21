@@ -34,15 +34,19 @@ import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.csc490seniorproject.R
+import com.example.csc490seniorproject.data.SongRepository
 import com.example.csc490seniorproject.viewmodels.SongScreenVM
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @Composable
 fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavController) {
+
+    val scope = rememberCoroutineScope()
 
     var songName by remember(songId) {
         mutableStateOf("Loading…")
@@ -809,6 +813,18 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
             Button(
                 onClick = {
                     if (songId.isNotBlank() && songLoadError == null) {
+                        scope.launch {
+                            try {
+                                SongRepository.recordSongView(songId)
+                            } catch (e: Exception) {
+                                android.util.Log.e(
+                                    "SongViews",
+                                    "Failed to record song view",
+                                    e
+                                )
+                            }
+                        }
+
                         navController.navigate(
                             "GameScreen/${Uri.encode(songId)}"
                         )

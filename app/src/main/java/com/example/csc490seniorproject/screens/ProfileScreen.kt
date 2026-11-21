@@ -87,6 +87,9 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
+import androidx.compose.runtime.rememberCoroutineScope
+import com.example.csc490seniorproject.data.SongRepository
+import kotlinx.coroutines.launch
 
 private enum class ProfileTab { SONGS, FRIENDS }
 @Composable
@@ -964,7 +967,8 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                                 navController.navigate(
                                     "SongScreen/${Uri.encode(song.id)}"
                                 )
-                            }
+                            },
+                            navController = navController
                         )
                     }
                 }
@@ -1175,8 +1179,11 @@ private fun ProfileSongCard(
     font: FontFamily,
     ProfilePurple: Color = Color(0xFF5D36EB),
     ProfileCardPurple: Color = Color(0xFFBFB1FA),
-    onDetails: () -> Unit
+    onDetails: () -> Unit,
+    navController: NavController
 ) {
+    val scope = rememberCoroutineScope()
+
     Surface(
         color = ProfileCardPurple,
         shape = RoundedCornerShape(10.dp),
@@ -1256,7 +1263,21 @@ private fun ProfileSongCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Button(
-                    onClick = {},
+                    onClick = {
+                        scope.launch {
+                            try {
+                                SongRepository.recordSongView(song.id)
+                            } catch (e: Exception) {
+                                android.util.Log.e(
+                                    "SongViews",
+                                    "Failed to record song view",
+                                    e
+                                )
+                            }
+                        }
+
+                        navController.navigate("GameScreen/${song.id}")
+                    },
                     enabled = true,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = ProfilePurple,

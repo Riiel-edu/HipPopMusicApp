@@ -125,12 +125,6 @@ fun TopBar(navController: NavHostController) {
                     onClick = {
                         navController.navigate("SettingsScreen") {
                             launchSingleTop = true
-                            restoreState = true
-
-                            popUpTo(navController.graph.findStartDestination().id
-                            ) {
-                                saveState = true
-                            }
                         }
                     }
                 ) {
