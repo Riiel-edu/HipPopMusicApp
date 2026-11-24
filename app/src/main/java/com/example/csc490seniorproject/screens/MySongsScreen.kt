@@ -297,7 +297,9 @@
                                                 modifier = Modifier.fillMaxWidth()
                                             ) {
                                                 Button(
-                                                    onClick = { navController.navigate("BeatmapEditorScreen/${currentItem.id}") },
+                                                    onClick = {
+                                                        navController.navigate("BeatmapEditorScreen/${currentItem.id}")
+                                                    },
                                                     colors = buttonColors,
                                                     modifier = Modifier.weight(1f)
                                                 ) {

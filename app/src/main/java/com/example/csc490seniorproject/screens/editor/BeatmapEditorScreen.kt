@@ -56,7 +56,20 @@ fun BeatmapEditorScreen(viewModel: BeatmapEditorVM, navController: NavController
     val currentSong by workspaceViewModel.currentSong.collectAsState()
     val songStep by workspaceViewModel.songCurrentStep.collectAsState()
 
-    LaunchedEffect(Unit) { workspaceViewModel.seekSong(0) }
+    val context = LocalContext.current
+    val songId = navController.currentBackStackEntry?.arguments?.getString("songId")
+
+    LaunchedEffect(songId) {
+        if (songId != null && currentSong?.id != songId) {
+            val loaded = workspaceViewModel.loadSongById(songId)
+
+            if (loaded) {
+                workspaceViewModel.seekSong(0)
+            }
+        } else {
+            workspaceViewModel.seekSong(0)
+        }
+    }
 
     DisposableEffect(navController) {
         val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
@@ -91,11 +104,20 @@ fun BeatmapEditorScreen(viewModel: BeatmapEditorVM, navController: NavController
                 }
 
                 Button(
-                    onClick = { navController.navigate("EditorScreen/${currentSong?.id}") },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFbfb1fa), contentColor = Color.White),
+                    onClick = {
+                        currentSong?.id?.let { songId ->
+                            workspaceViewModel.stopSong()
+                            navController.navigate("EditorScreen/$songId")
+                        }
+                    },
+                    enabled = currentSong != null,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFbfb1fa),
+                        contentColor = Color.White
+                    ),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text(text = "\u2B05 Song Editor", fontFamily = fredoka)
+                    Text("⬅ Song Editor", fontFamily = fredoka)
                 }
                 Button(
                     onClick = {
