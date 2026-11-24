@@ -395,7 +395,20 @@ enum class FriendStatus { NONE, REQUEST_SENT, REQUEST_RECEIVED, FRIENDS }
                 }
             }
     }
-
+     fun getSongPfp(songId: String, onResult: (String) -> Unit) {
+         FirebaseStorage.getInstance(
+             "gs://senior-project-13e67.firebasestorage.app"
+         ).reference
+             .child("songPictures/$songId.jpg")
+             .downloadUrl
+             .addOnSuccessListener {
+                 onResult(it.toString())
+             }
+             .addOnFailureListener {
+                 println("SONG: Failed to load song pfp: ${it.message}")
+                 onResult("")
+             }
+     }
 
      fun getProfileDetails(myUid: String, onLoaded: () -> Unit = {}) {
          profileDetailsGeneration++

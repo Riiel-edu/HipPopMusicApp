@@ -15,6 +15,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
+import com.google.firebase.storage.FirebaseStorage
 
 class SearchScreenVM(application: Application) : AndroidViewModel(application) {
     val songsList = mutableStateListOf<Song>()
@@ -331,6 +332,20 @@ class SearchScreenVM(application: Application) : AndroidViewModel(application) {
             }
             .addOnFailureListener { error ->
                 println("FIREBASE: sendFriendRequest failed: $error")
+            }
+    }
+    fun getSongPfp(songId: String, onResult: (String) -> Unit) {
+        FirebaseStorage.getInstance(
+            "gs://senior-project-13e67.firebasestorage.app"
+        ).reference
+            .child("songPictures/$songId.jpg")
+            .downloadUrl
+            .addOnSuccessListener {
+                onResult(it.toString())
+            }
+            .addOnFailureListener {
+                println("SONG: Failed to load song pfp: ${it.message}")
+                onResult("")
             }
     }
 

@@ -34,6 +34,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -472,10 +473,20 @@ fun SearchScreen(
                                     shape = RoundedCornerShape(10.dp),
                                     border = BorderStroke(2.dp, Color.Black)
                                 ) {
-                                    Image(
-                                        painter = painterResource(id = R.drawable.default_pfp),
+                                    var songPfp by remember(song.id) {
+                                        mutableStateOf("")
+                                    }
+
+                                    LaunchedEffect(song.id) {
+                                        viewModel.getSongPfp(song.id) { url ->
+                                            songPfp = url
+                                        }
+                                    }
+
+                                    coil.compose.AsyncImage(
+                                        model = songPfp.ifBlank { R.drawable.default_pfp },
                                         contentScale = ContentScale.Crop,
-                                        contentDescription = null,
+                                        contentDescription = "Song artwork",
                                         modifier = Modifier
                                             .size(90.dp)
                                             .clip(RoundedCornerShape(8.dp))

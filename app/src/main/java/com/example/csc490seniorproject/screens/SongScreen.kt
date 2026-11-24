@@ -1,8 +1,12 @@
 package com.example.csc490seniorproject.screens
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,6 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,6 +53,27 @@ import kotlinx.coroutines.launch
 fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavController) {
 
     val scope = rememberCoroutineScope()
+    val ProfilePurple = Color(0xFF5D36EB)
+    var temporaryArtworkUri by remember {
+        mutableStateOf<Uri?>(null)
+    }
+
+    val artworkPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            temporaryArtworkUri = uri
+
+            viewModel.uploadSongPfp(songId, uri)
+        }
+    }
+    var songPfp by remember { mutableStateOf("") }
+
+    LaunchedEffect(songId) {
+        viewModel.getSongPfp(songId) { url ->
+            songPfp = url
+        }
+    }
 
     var songName by remember(songId) {
         mutableStateOf("Loading…")
@@ -669,17 +696,63 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            Box(
+                modifier = Modifier.size(120.dp)
+            ) {
             Surface(
+                modifier = Modifier.clickable {
+                    artworkPicker.launch(
+                        PickVisualMediaRequest(
+                            ActivityResultContracts.PickVisualMedia.ImageOnly
+                        )
+                    )
+                },
                 shape = CircleShape,
                 shadowElevation = 30.dp,
                 border = BorderStroke(2.dp, purple)
             ) {
-                Image(
-                    painter = painterResource(R.drawable.default_pfp),
-                    contentScale = ContentScale.Crop,
-                    contentDescription = null,
-                    modifier = Modifier.size(120.dp)
-                )
+
+                if (temporaryArtworkUri != null) {
+                    AsyncImage(
+                        model = temporaryArtworkUri,
+                        contentScale = ContentScale.Crop,
+                        contentDescription = null,
+                        modifier = Modifier.size(120.dp)
+                    )
+                } else if (songPfp.isNotBlank()) {
+                    AsyncImage(
+                        model = songPfp,
+                        contentScale = ContentScale.Crop,
+                        contentDescription = null,
+                        modifier = Modifier.size(120.dp)
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(R.drawable.default_pfp),
+                        contentScale = ContentScale.Crop,
+                        contentDescription = null,
+                        modifier = Modifier.size(120.dp)
+                    )
+                }
+            }
+
+                Surface(
+                    shape = CircleShape,
+                    color = ProfilePurple,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(36.dp)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit profile picture",
+                            tint = Color.White
+                        )
+                    }
+                }
             }
 
             Column(

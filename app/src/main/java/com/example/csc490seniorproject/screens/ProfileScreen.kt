@@ -88,6 +88,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.csc490seniorproject.data.SongRepository
 import kotlinx.coroutines.launch
 
@@ -968,7 +969,8 @@ fun ProfileScreen(viewModel: ProfileScreenVM, navController: NavController, user
                                     "SongScreen/${Uri.encode(song.id)}"
                                 )
                             },
-                            navController = navController
+                            navController = navController,
+                            viewModel = viewModel
                         )
                     }
                 }
@@ -1180,8 +1182,18 @@ private fun ProfileSongCard(
     ProfilePurple: Color = Color(0xFF5D36EB),
     ProfileCardPurple: Color = Color(0xFFBFB1FA),
     onDetails: () -> Unit,
-    navController: NavController
+    navController: NavController,
+    viewModel: ProfileScreenVM
 ) {
+    var songPfp by remember(song.id) {
+        mutableStateOf("")
+    }
+
+    LaunchedEffect(song.id) {
+        viewModel.getSongPfp(song.id) { url ->
+            songPfp = url
+        }
+    }
     val scope = rememberCoroutineScope()
 
     Surface(
@@ -1200,8 +1212,9 @@ private fun ProfileSongCard(
                     border = BorderStroke(2.dp, Color.Black),
                     shadowElevation = 8.dp
                 ) {
-                    Image(
-                        painter = painterResource(R.drawable.default_pfp),
+
+                    coil.compose.AsyncImage(
+                        model = songPfp.ifBlank { R.drawable.default_pfp },
                         contentDescription = "Song artwork",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
