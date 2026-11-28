@@ -68,6 +68,13 @@ import com.example.csc490seniorproject.viewmodels.LandingScreenVM
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.floor
+import com.example.csc490seniorproject.moderation.Reporting
+import com.example.csc490seniorproject.moderation.ReportCase
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import com.example.csc490seniorproject.moderation.Appeals
+import com.example.csc490seniorproject.moderation.SuspendedUsersButton
 
 @Composable
 fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, username: String) {
@@ -88,16 +95,115 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
         viewModel.refresh()
     }
 
-    if(isModerator) {
+    if (isModerator) {
+
+        var showReviewScreen by remember {
+            mutableStateOf(false)
+        }
+
+        if (showReviewScreen) {
+            Reporting.ModeratorReviewScreen(
+                onBack = {
+                    showReviewScreen = false
+                    viewModel.refresh()
+                })
+            return
+        }
+
+        var caseToDismiss by remember {
+            mutableStateOf<ReportCase?>(null)
+        }
+
+        var dismissalReason by remember {
+            mutableStateOf("")
+        }
+
+        var dismissalBusy by remember {
+            mutableStateOf(false)
+        }
+
+        var dismissalError by remember {
+            mutableStateOf<String?>(null)
+        }
+
+        caseToDismiss?.let { selectedCase ->
+            AlertDialog(onDismissRequest = {
+                if (!dismissalBusy) {
+                    caseToDismiss = null
+                }
+            }, title = {
+                Text("Dismiss report case?")
+            }, text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        "Dismiss the case for " + selectedCase.targetUsername + " without suspending the account."
+                    )
+
+                    OutlinedTextField(
+                        value = dismissalReason,
+                        onValueChange = {
+                            dismissalReason = it
+                            dismissalError = null
+                        },
+                        label = {
+                            Text("Reason for dismissal")
+                        },
+                        supportingText = {
+                            Text("10–1,000 characters")
+                        },
+                        enabled = !dismissalBusy,
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    dismissalError?.let { message ->
+                        Text(
+                            text = message, color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }, confirmButton = {
+                TextButton(
+                    enabled = !dismissalBusy && dismissalReason.trim().length in 10..1000,
+                    onClick = {
+                        dismissalBusy = true
+                        dismissalError = null
+
+                        Reporting.dismissReportCase(
+                            targetUid = selectedCase.targetUid,
+                            caseId = selectedCase.caseId,
+                            reason = dismissalReason,
+                            onDone = { failure ->
+                                dismissalBusy = false
+
+                                if (failure == null) {
+                                    caseToDismiss = null
+                                    dismissalReason = ""
+                                    viewModel.refresh()
+                                } else {
+                                    dismissalError = failure
+                                }
+                            })
+                    }) {
+                    Text(
+                        if (dismissalBusy) "Dismissing…" else "Dismiss case"
+                    )
+                }
+            }, dismissButton = {
+                TextButton(
+                    enabled = !dismissalBusy, onClick = {
+                        caseToDismiss = null
+                    }) {
+                    Text("Cancel")
+                }
+            })
+        }
 
         var pendingExpanded by remember { mutableStateOf(false) }
         var appealsExpanded by remember { mutableStateOf(false) }
         var finishedExpanded by remember { mutableStateOf(false) }
-
-        val pendingAppeals = listOf(
-            "Appeal #201 - User: MusicFan23\nOriginal action: Song removed\nReason: Incorrect moderation",
-            "Appeal #202 - User: BeatMaker\nOriginal action: Account suspended\nReason: Mistaken identity"
-        )
 
         Box(
             modifier = Modifier
@@ -142,6 +248,7 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                         .padding(horizontal = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
+                    SuspendedUsersButton()
 
                     Surface(
                         color = Color(0xFFBFB1FA),
@@ -171,10 +278,8 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                 )
 
                                 Icon(
-                                    imageVector = if (pendingExpanded)
-                                        Icons.Default.MusicNote
-                                    else
-                                        Icons.Default.MusicNote,
+                                    imageVector = if (pendingExpanded) Icons.Default.MusicNote
+                                    else Icons.Default.MusicNote,
                                     contentDescription = null,
                                     tint = Color.White
                                 )
@@ -193,8 +298,7 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                             ) {
                                 Text(
                                     if (pendingExpanded) "Hide Reports ▲"
-                                    else "View Reports ▼",
-                                    fontFamily = fredoka
+                                    else "View Reports ▼", fontFamily = fredoka
                                 )
                             }
 
@@ -204,6 +308,10 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                     thickness = 2.dp,
                                     modifier = Modifier.padding(vertical = 10.dp)
                                 )
+
+                                if (!loading && error == null && pendingReports.isEmpty()) {
+                                    Text(text = "No pending account reports.")
+                                }
 
                                 pendingReports.forEach { reportCase ->
 
@@ -259,17 +367,18 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
                                                 Button(
-                                                    onClick = {
-                                                        // Connect to moderation action
-                                                    },
+                                                    onClick = { showReviewScreen = true },
                                                     modifier = Modifier.weight(1f)
                                                 ) {
                                                     Text("Review")
                                                 }
 
                                                 Button(
+                                                    enabled = !dismissalBusy,
                                                     onClick = {
-                                                        // Connect to dismissal action
+                                                        dismissalReason = ""
+                                                        dismissalError = null
+                                                        caseToDismiss = reportCase
                                                     },
                                                     modifier = Modifier.weight(1f),
                                                     colors = ButtonDefaults.buttonColors(
@@ -307,17 +416,12 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                 )
 
                                 Text(
-                                    "${pendingAppeals.size}",
-                                    fontFamily = fredoka,
-                                    color = Color.White,
-                                    fontSize = 16.sp
+                                    "", fontFamily = fredoka, color = Color.White, fontSize = 16.sp
                                 )
 
                                 Icon(
-                                    imageVector = if (pendingExpanded)
-                                        Icons.Default.MusicNote
-                                    else
-                                        Icons.Default.MusicNote,
+                                    imageVector = if (pendingExpanded) Icons.Default.MusicNote
+                                    else Icons.Default.MusicNote,
                                     contentDescription = null,
                                     tint = Color.White
                                 )
@@ -336,8 +440,7 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                             ) {
                                 Text(
                                     if (appealsExpanded) "Hide Appeals ▲"
-                                    else "View Appeals ▼",
-                                    fontFamily = fredoka
+                                    else "View Appeals ▼", fontFamily = fredoka
                                 )
                             }
 
@@ -348,55 +451,11 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                     modifier = Modifier.padding(vertical = 10.dp)
                                 )
 
-                                pendingAppeals.forEach { appeal ->
-                                    Surface(
-                                        color = Color.White,
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(bottom = 10.dp)
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(12.dp)
-                                        ) {
-                                            Text(
-                                                appeal,
-                                                fontFamily = fredoka,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFF444444)
-                                            )
-
-                                            Spacer(modifier = Modifier.height(10.dp))
-
-                                            Row(
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Button(
-                                                    onClick = { },
-                                                    modifier = Modifier.weight(1f),
-                                                    colors = ButtonDefaults.buttonColors(
-                                                        containerColor = Color(0xFF388E3C)
-                                                    )
-                                                ) {
-                                                    Text("Accept", fontFamily = fredoka)
-                                                }
-
-                                                Button(
-                                                    onClick = { },
-                                                    modifier = Modifier.weight(1f),
-                                                    colors = ButtonDefaults.buttonColors(
-                                                        containerColor = Color(0xFFD32F2F)
-                                                    )
-                                                ) {
-                                                    Text("Reject", fontFamily = fredoka)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                Appeals.PendingList()
                             }
                         }
                     }
+
 
                     Surface(
                         color = Color(0xFFBFB1FA),
@@ -418,6 +477,10 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                             Button(
                                 onClick = {
                                     finishedExpanded = !finishedExpanded
+
+                                    if (finishedExpanded) {
+                                        viewModel.refresh()
+                                    }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(
@@ -426,8 +489,7 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                             ) {
                                 Text(
                                     if (finishedExpanded) "Hide Finished Reports ▲"
-                                    else "View Finished Reports ▼",
-                                    fontFamily = fredoka
+                                    else "View Finished Reports ▼", fontFamily = fredoka
                                 )
                             }
 
@@ -437,9 +499,26 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                     thickness = 2.dp,
                                     modifier = Modifier.padding(vertical = 10.dp)
                                 )
+                                when {
+                                    loading -> {
+                                        Text(
+                                            text = "Loading finished reports…", fontFamily = fredoka
+                                        )
+                                    }
+
+                                    error != null -> {
+                                        Text(
+                                            text = error ?: "Couldn't load finished reports.",
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+
+                                    finishedReports.isEmpty() -> {
+                                        Text(text = "No finished reports yet.")
+                                    }
+                                }
 
                                 finishedReports.forEach { report ->
-
                                     Surface(
                                         color = Color.White,
                                         shape = RoundedCornerShape(8.dp),
@@ -448,49 +527,30 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                             .padding(bottom = 10.dp)
                                     ) {
                                         Column(
-                                            modifier = Modifier.padding(12.dp)
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             Text(
-                                                "Case ID: ${report.caseId}",
-                                                fontFamily = fredoka,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFF444444)
+                                                text = when (report.decision) {
+                                                    "CONFIRMED" -> "Violation confirmed"
+                                                    "DISMISSED" -> "Report dismissed"
+                                                    else -> report.decision
+                                                },
+                                                style = MaterialTheme.typography.titleMedium
                                             )
 
-                                            Text(
-                                                "Target User: ${report.targetUid}",
-                                                fontFamily = fredoka,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFF444444)
-                                            )
+                                            Text(text = "Reason: ${report.reason}")
+                                            Text(text = "Reports reviewed: ${report.reportCount}")
 
-                                            Text(
-                                                "Decision: ${report.decision}",
-                                                fontFamily = fredoka,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFF444444)
-                                            )
-
-                                            Text(
-                                                "Moderator: ${report.moderatorId}",
-                                                fontFamily = fredoka,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFF444444)
-                                            )
-
-                                            Text(
-                                                "Moderator Reason: ${report.reason}",
-                                                fontFamily = fredoka,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFF444444)
-                                            )
-
-                                            Text(
-                                                "Reports Reviewed: ${report.reportCount}",
-                                                fontFamily = fredoka,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFF444444)
-                                            )
+                                            report.createdAt?.let { timestamp ->
+                                                Text(
+                                                    text = "Reviewed: " +
+                                                            java.text.SimpleDateFormat(
+                                                                "MMM d, yyyy",
+                                                                Locale.US
+                                                            ).format(timestamp.toDate())
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -502,7 +562,9 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
         }
     } else {
         Box(
-            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
         ) {
             Column(
                 modifier = Modifier
@@ -515,12 +577,15 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                         "♫ Welcome Back, $username! ♫",
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
-                        fontFamily = fredoka, fontSize = 28.sp,
+                        fontFamily = fredoka,
+                        fontSize = 28.sp,
                         color = Color(0xFF5d36eb)
                     )
                 }
                 Surface(
-                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
                     shape = RoundedCornerShape(10.dp),
                     shadowElevation = 30.dp,
                     color = Color(0xFFBFB1FA)
@@ -552,12 +617,9 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                             Button(
                                 onClick = {
                                     navController.navigate("MySongsScreen")
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF5d36eb),
-                                    contentColor = Color.White
-                                ),
-                                modifier = Modifier.weight(1f)
+                                }, colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF5d36eb), contentColor = Color.White
+                                ), modifier = Modifier.weight(1f)
                             ) {
                                 Text(
                                     "Make New Song \uD83D\uDCBF",
@@ -569,12 +631,9 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                             Button(
                                 onClick = {
                                     navController.navigate("SearchScreen")
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF5d36eb),
-                                    contentColor = Color.White
-                                ),
-                                modifier = Modifier.weight(1f)
+                                }, colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF5d36eb), contentColor = Color.White
+                                ), modifier = Modifier.weight(1f)
                             ) {
                                 Text(
                                     "Find New Songs \uD83D\uDCC0",
@@ -608,28 +667,22 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                         Spacer(modifier = Modifier.height(5.dp))
 
                         HorizontalDivider(
-                            color = Color.White,
-                            thickness = 2.dp
+                            color = Color.White, thickness = 2.dp
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
 
                         if (loading) {
                             Text(
-                                "Loading songs...",
-                                fontFamily = fredoka,
-                                color = Color.White
+                                "Loading songs...", fontFamily = fredoka, color = Color.White
                             )
                         } else if (topSongs.isEmpty()) {
                             Text(
-                                "No published songs yet!",
-                                fontFamily = fredoka,
-                                color = Color.White
+                                "No published songs yet!", fontFamily = fredoka, color = Color.White
                             )
                         } else {
                             val pagerState = rememberPagerState(
-                                pageCount = { topSongs.size }
-                            )
+                                pageCount = { topSongs.size })
 
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
@@ -690,17 +743,12 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                                         overflow = TextOverflow.Ellipsis
                                                     )
 
-                                                    val stars = floor(song.rating + 0.5)
-                                                        .toInt()
+                                                    val stars = floor(song.rating + 0.5).toInt()
                                                         .coerceIn(0, 5)
 
                                                     Text(
-                                                        text = "★".repeat(stars) +
-                                                                "☆".repeat(5 - stars) +
-                                                                "  " + String.format(
-                                                            Locale.US,
-                                                            "%.1f/5.0",
-                                                            song.rating
+                                                        text = "★".repeat(stars) + "☆".repeat(5 - stars) + "  " + String.format(
+                                                            Locale.US, "%.1f/5.0", song.rating
                                                         ),
                                                         fontFamily = fredoka,
                                                         color = Color(0xFF5D36EB)
@@ -746,11 +794,9 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                                         navController.navigate(
                                                             "GameScreen/${Uri.encode(song.id)}"
                                                         )
-                                                    },
-                                                    colors = ButtonDefaults.buttonColors(
+                                                    }, colors = ButtonDefaults.buttonColors(
                                                         containerColor = Color(0xFF5D36EB)
-                                                    ),
-                                                    modifier = Modifier.weight(1f)
+                                                    ), modifier = Modifier.weight(1f)
                                                 ) {
                                                     Text(
                                                         "▶ Play",
@@ -765,11 +811,9 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                                         navController.navigate(
                                                             "SongScreen/${Uri.encode(song.id)}"
                                                         )
-                                                    },
-                                                    colors = ButtonDefaults.buttonColors(
+                                                    }, colors = ButtonDefaults.buttonColors(
                                                         containerColor = Color(0xFF5D36EB)
-                                                    ),
-                                                    modifier = Modifier.weight(1.6f)
+                                                    ), modifier = Modifier.weight(1.6f)
                                                 ) {
                                                     Text(
                                                         "More details ☰",
@@ -801,10 +845,8 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                                 )
                                                 .clip(RoundedCornerShape(50))
                                                 .background(
-                                                    if (pagerState.currentPage == index)
-                                                        Color.White
-                                                    else
-                                                        Color.White.copy(alpha = 0.4f)
+                                                    if (pagerState.currentPage == index) Color.White
+                                                    else Color.White.copy(alpha = 0.4f)
                                                 )
                                         )
                                     }
@@ -851,17 +893,14 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                         Spacer(modifier = Modifier.height(5.dp))
 
                         HorizontalDivider(
-                            color = Color.White,
-                            thickness = 2.dp
+                            color = Color.White, thickness = 2.dp
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
 
                         if (loading) {
                             Text(
-                                "Loading activity...",
-                                fontFamily = fredoka,
-                                color = Color.White
+                                "Loading activity...", fontFamily = fredoka, color = Color.White
                             )
                         } else if (friendActivity.isEmpty()) {
                             Text(
@@ -962,15 +1001,12 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                                         navController.navigate(
                                                             "GameScreen/${activity.song.id}"
                                                         )
-                                                    },
-                                                    colors = ButtonDefaults.buttonColors(
+                                                    }, colors = ButtonDefaults.buttonColors(
                                                         containerColor = Color(0xFF5D36EB)
-                                                    ),
-                                                    modifier = Modifier.weight(1f)
+                                                    ), modifier = Modifier.weight(1f)
                                                 ) {
                                                     Text(
-                                                        "▶ Play",
-                                                        fontFamily = fredoka
+                                                        "▶ Play", fontFamily = fredoka
                                                     )
                                                 }
 
@@ -979,11 +1015,9 @@ fun LandingScreen(viewModel: LandingScreenVM, navController: NavController, user
                                                         navController.navigate(
                                                             "SongScreen/${Uri.encode(activity.song.id)}"
                                                         )
-                                                    },
-                                                    colors = ButtonDefaults.buttonColors(
+                                                    }, colors = ButtonDefaults.buttonColors(
                                                         containerColor = Color(0xFF5D36EB)
-                                                    ),
-                                                    modifier = Modifier.weight(1.6f)
+                                                    ), modifier = Modifier.weight(1.6f)
                                                 ) {
                                                     Text(
                                                         "More details ☰",
