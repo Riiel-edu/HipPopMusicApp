@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -58,6 +59,25 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
         mutableStateOf<Uri?>(null)
     }
 
+    var isModerator by remember {
+        mutableStateOf(false)
+    }
+    val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
+
+    LaunchedEffect(currentUserId) {
+        if (currentUserId != null) {
+            viewModel.checkIfModerator(currentUserId) { result ->
+                isModerator = result
+                println("MODERATOR STATUS: $isModerator")
+            }
+        }
+
+    }
+
+    var songMenuExpanded by remember(songId) {
+        mutableStateOf(false)
+    }
+
     val artworkPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -73,6 +93,7 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
         viewModel.getSongPfp(songId) { url ->
             songPfp = url
         }
+
     }
 
     var songName by remember(songId) {
@@ -177,7 +198,8 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
         SongFeaturePopup(
             songId = songId,
             leaderboard = panel == "Leaderboard",
-            onClose = { openPanel = null }
+            onClose = { openPanel = null },
+            isModerator = isModerator
         )
     }
 
@@ -683,6 +705,47 @@ fun SongScreen(viewModel: SongScreenVM, songId: String = "", navController: NavC
             .padding(20.dp)
             .verticalScroll(rememberScrollState())
     ) {
+
+        if (isModerator) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Box {
+                    IconButton(
+                        onClick = { songMenuExpanded = true }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Song options",
+                            tint = ProfilePurple
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = songMenuExpanded,
+                        onDismissRequest = { songMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Delete Song") },
+                            onClick = {
+                                songMenuExpanded = false
+
+                                viewModel.deleteSong(
+                                    songId = songId,
+                                    onSuccess = {
+                                        println("SONG: Song deleted")
+                                    },
+                                    onError = { error ->
+                                        println("SONG: $error")
+                                    }
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
         Spacer(Modifier.height(2.5.dp))
 
         HorizontalDivider(
@@ -1227,7 +1290,8 @@ private data class RankedScore(
 private fun SongFeaturePopup(
     songId: String,
     leaderboard: Boolean,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    isModerator:Boolean
 ) {
     val db = remember { FirebaseFirestore.getInstance() }
     val auth = remember { FirebaseAuth.getInstance() }
@@ -1724,7 +1788,8 @@ private fun SongFeaturePopup(
                                 comment = comment,
                                 username = names[comment.userId] ?: "User",
                                 currentUid = currentUid,
-                                isSongOwner = isSongOwner
+                                isSongOwner = isSongOwner,
+                                isModerator = isModerator
                             )
                         }
                     }
@@ -1814,8 +1879,10 @@ private fun ManagedCommentCard(
     comment: SongComment,
     username: String,
     currentUid: String?,
-    isSongOwner: Boolean
+    isSongOwner: Boolean,
+    isModerator: Boolean
 ) {
+
     val db = remember { FirebaseFirestore.getInstance() }
     val purple = Color(0xFF5D36EB)
 
@@ -1933,7 +2000,7 @@ private fun ManagedCommentCard(
                     )
                 }
 
-                if (isCommentAuthor || isSongOwner) {
+                if (isCommentAuthor || isSongOwner || isModerator) {
                     Box {
                         IconButton(
                             enabled = !busy,
@@ -1955,7 +2022,7 @@ private fun ManagedCommentCard(
                             expanded = menuOpen,
                             onDismissRequest = { menuOpen = false }
                         ) {
-                            if (isCommentAuthor) {
+                            if (isCommentAuthor || isModerator) {
                                 DropdownMenuItem(
                                     text = {
                                         Text(
@@ -2040,7 +2107,7 @@ private fun ManagedCommentCard(
         }
     }
 
-    if (confirmDelete && isCommentAuthor) {
+    if (confirmDelete && (isCommentAuthor || isModerator)) {
         AlertDialog(
             onDismissRequest = {
                 if (!busy) confirmDelete = false

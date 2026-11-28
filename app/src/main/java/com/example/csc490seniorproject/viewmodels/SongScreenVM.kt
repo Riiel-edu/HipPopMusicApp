@@ -48,7 +48,37 @@ class SongScreenVM(application: Application) : AndroidViewModel(application) {
             }
     }
 
+    fun checkIfModerator(
+        userId: String,
+        onResult: (Boolean) -> Unit
+    ) {
+        println("MODERATOR_CHECK: Function called for $userId")
 
+        val db = FirebaseFirestore.getInstance()
+
+        db.collection("moderators")
+            .get()
+            .addOnSuccessListener { documents ->
+                println("MODERATOR_CHECK: Firestore query succeeded")
+                println("MODERATOR_CHECK: Documents found: ${documents.size()}")
+
+                val moderatorDocument = documents.documents.find {
+                    it.id == userId
+                }
+
+                println("MODERATOR_CHECK: Matching document: ${moderatorDocument?.id}")
+
+                val enabled = moderatorDocument?.getBoolean("enabled") ?: false
+
+                println("MODERATOR_CHECK: User: $userId | Enabled: $enabled")
+
+                onResult(enabled)
+            }
+            .addOnFailureListener { error ->
+                println("MODERATOR_CHECK: Firestore error: ${error.message}")
+                onResult(false)
+            }
+    }
 
     fun uploadSongPfp(songId: String, imageUri: Uri) {
         println("SONG: Starting image upload")
@@ -82,5 +112,43 @@ class SongScreenVM(application: Application) : AndroidViewModel(application) {
                 println("SONG: Failed to load song pfp: ${it.message}")
                 onResult("")
             }
+    }
+
+    fun deleteSong(
+        songId: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid
+
+        if (userId == null) {
+            onError("Please log in to delete songs.")
+            return
+        }
+
+        if (songId.isBlank()) {
+            onError("Invalid song ID.")
+            return
+        }
+
+        checkIfModerator(userId) { isModerator ->
+            if (!isModerator) {
+                onError("Only moderators can delete songs.")
+                return@checkIfModerator
+            }
+
+            FirebaseFirestore.getInstance()
+                .collection("songs")
+                .document(songId)
+                .delete()
+                .addOnSuccessListener {
+                    println("SONG: Deleted successfully")
+                    onSuccess()
+                }
+                .addOnFailureListener { error ->
+                    println("SONG: Delete failed: ${error.message}")
+                    onError(error.localizedMessage ?: "Unable to delete song.")
+                }
+        }
     }
 }
