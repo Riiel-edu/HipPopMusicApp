@@ -353,6 +353,14 @@ class Moderation {
                         if (count > 0) {
                             Text("Confirmed violations: $count / 4")
                         }
+                        if (error == null && count > 0) {
+                            moderation?.getString("incidentId")?.let { incidentId ->
+                                Appeals.SubmitButton(
+                                    uid = uid,
+                                    incidentId = incidentId
+                                )
+                            }
+                        }
 
                         Spacer(Modifier.height(16.dp))
 
