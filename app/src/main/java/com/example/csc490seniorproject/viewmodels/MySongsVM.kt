@@ -32,17 +32,51 @@ class MySongsVM : ViewModel() {
     }
 
     /** Creates the song AND its beatmap up front, then hands back the id to open in the editor. */
-    fun createSong(name: String, genre: List<String>, onCreated: (String) -> Unit) = viewModelScope.launch {
+    fun createSong(
+        name: String,
+        tags: List<String>,
+        description: String,
+        onCreated: (String) -> Unit
+    ) = viewModelScope.launch {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid == null) { _error.value = "Not signed in"; return@launch }
+
+        if (uid == null) {
+            _error.value = "Not signed in"
+            return@launch
+        }
+
         try {
-            val song = newSong(ownerId = uid).copy(name = name.ifBlank { "Untitled Song" }, genre = genre)
-            val map = Beatmap(
-                songId = song.id, ownerId = uid, title = song.name, bpm = song.bpm,
-                stepsPerBeat = song.stepsPerBeat, beatsPerBar = song.beatsPerBar, bars = song.bars
+            val song = newSong(ownerId = uid).copy(
+                name = name.ifBlank { "Untitled Song" }
             )
+
+            val map = Beatmap(
+                songId = song.id,
+                ownerId = uid,
+                title = song.name,
+                bpm = song.bpm,
+                stepsPerBeat = song.stepsPerBeat,
+                beatsPerBar = song.beatsPerBar,
+                bars = song.bars
+            )
+
             SongRepository.saveAll(song, map)
+
+            // Save the editable song details directly to Firestore.
+            FirebaseFirestore.getInstance()
+                .collection("songs")
+                .document(song.id)
+                .update(
+                    mapOf(
+                        "tags" to tags,
+                        "description" to description.trim()
+                    )
+                )
+                .await()
+
+            refresh()
             onCreated(song.id)
+
         } catch (e: Exception) {
             _error.value = "Couldn't create song: ${e.message}"
         }
@@ -71,6 +105,15 @@ class MySongsVM : ViewModel() {
                 // Set ownership and creation time
                 templateData["ownerId"] = uid
                 templateData["createdAt"] = FieldValue.serverTimestamp()
+                templateData["tags"] =
+                    (templateData["tags"] as? List<*>)
+                        ?.filterIsInstance<String>()
+                        ?: (templateData["genre"] as? List<*>)
+                            ?.filterIsInstance<String>()
+                                ?: emptyList<String>()
+
+                templateData["description"] =
+                    templateData["description"] as? String ?: ""
 
                 // Create a new song document
                 val newSongRef = db.collection("songs").document()
@@ -123,9 +166,30 @@ class MySongsVM : ViewModel() {
                 println("FIREBASE: Template loading failed: ${e.message}")
             }
         }
-    fun updateDetails(id: String, name: String, genre: List<String>) = viewModelScope.launch {
-        try { SongRepository.updateSongDetails(id, name, genre); refresh() }
-        catch (e: Exception) { _error.value = "Couldn't update: ${e.message}" }
+    fun updateDetails(
+        id: String,
+        name: String,
+        tags: List<String>,
+        description: String
+    ) = viewModelScope.launch {
+        try {
+            FirebaseFirestore.getInstance()
+                .collection("songs")
+                .document(id)
+                .update(
+                    mapOf(
+                        "name" to name.ifBlank { "Untitled Song" },
+                        "tags" to tags,
+                        "description" to description.trim()
+                    )
+                )
+                .await()
+
+            refresh()
+
+        } catch (e: Exception) {
+            _error.value = "Couldn't update song details: ${e.message}"
+        }
     }
 
     fun togglePublish(song: Song) = viewModelScope.launch {
