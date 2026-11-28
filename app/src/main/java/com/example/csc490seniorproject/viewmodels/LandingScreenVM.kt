@@ -3,7 +3,6 @@ package com.example.csc490seniorproject.viewmodels
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.csc490seniorproject.data.SongRepository
 import com.example.csc490seniorproject.moderation.FinishedReport
@@ -15,11 +14,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import java.security.Timestamp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -162,25 +159,30 @@ class LandingScreenVM(application: Application) :
     }
 
     private suspend fun loadFinishedReports() {
-        val reviews = db.collectionGroup("reviews")
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .get()
-            .await()
+        val queues = db.collection("reportQueues").get().await()
 
-        _finishedReports.value = reviews.documents.mapNotNull { doc ->
-            val targetUid = doc.reference.parent.parent?.id
-                ?: return@mapNotNull null
+        val finished = mutableListOf<FinishedReport>()
 
-            FinishedReport(
-                targetUid = targetUid,
-                caseId = doc.getString("caseId") ?: doc.id,
-                decision = doc.getString("decision") ?: "",
-                reason = doc.getString("reason") ?: "",
-                moderatorId = doc.getString("moderatorId") ?: "",
-                reportCount =
-                    doc.getLong("reportCount")?.toInt() ?: 0,
-                createdAt = doc.getTimestamp("createdAt")
-            )
+        for (queue in queues.documents) {
+            val reviews = queue.reference.collection("reviews").get().await()
+
+            for (doc in reviews.documents) {
+                finished.add(
+                    FinishedReport(
+                        targetUid = queue.id,
+                        caseId = doc.getString("caseId") ?: doc.id,
+                        decision = doc.getString("decision").orEmpty(),
+                        reason = doc.getString("reason").orEmpty(),
+                        moderatorId = doc.getString("moderatorId").orEmpty(),
+                        reportCount = doc.getLong("reportCount")?.toInt() ?: 0,
+                        createdAt = doc.getTimestamp("createdAt")
+                    )
+                )
+            }
+        }
+
+        _finishedReports.value = finished.sortedByDescending {
+            it.createdAt?.toDate()?.time ?: 0L
         }
     }
 
